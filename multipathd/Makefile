@@ -1,5 +1,6 @@
 BUILD = glibc
 EXEC = multipathd
+SEND = mpathsend
 
 include ../Makefile.inc
 
@@ -28,13 +29,16 @@ OBJS = main.o pidfile.o uxlsnr.o uxclnt.o cli.o cli_handlers.o \
 #
 all : $(BUILD)
 
-glibc: $(EXEC)
+glibc: $(EXEC) $(SEND)
 
 klibc:
 	$(MAKE) BUILD=glibc glibc
 
 $(EXEC): clean $(OBJS)
 	$(CC) $(OBJS) -o $(EXEC) $(LDFLAGS)
+
+$(SEND): mpathsend.o
+	$(CC) mpathsend.o -o $@ $(LDFLAGS)
 
 $(CHECKERSLIB)-glibc.a:
 	$(MAKE) -C $(checkersdir) BUILD=glibc glibc
@@ -58,3 +62,5 @@ clean:
 	$(MAKE) -C $(multipathdir) prepare DAEMON=1
 	rm -f core *.o $(EXEC)
 
+mpathsend.o: mpathsend.c
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -c mpathsend.c -o $@

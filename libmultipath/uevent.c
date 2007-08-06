@@ -26,12 +26,14 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <fcntl.h>
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/user.h>
-#include <asm/types.h>
+#include <sys/un.h>
+#include <linux/types.h>
 #include <linux/netlink.h>
 #include <pthread.h>
 #include <sys/mman.h>
@@ -104,13 +106,11 @@ int uevent_listen(int (*uev_trigger)(struct uevent *, void * trigger_data),
 		  void * trigger_data)
 {
 	int sock;
-	struct sockaddr_nl snl;
+	struct sockaddr_un sun;
+	socklen_t addrlen;
 	int retval;
-	int rcvbufsz = 128*1024;
-	int rcvsz = 0;
-	int rcvszsz = sizeof(rcvsz);
-	unsigned int *prcvszsz = (unsigned int *)&rcvszsz;
 	pthread_attr_t attr;
+	const int feature_on = 1;
 
 	my_uev_trigger = uev_trigger;
 	my_trigger_data = trigger_data;
@@ -131,44 +131,33 @@ int uevent_listen(int (*uev_trigger)(struct uevent *, void * trigger_data),
 	pthread_attr_setstacksize(&attr, 64 * 1024);
 	pthread_create(&uevq_thr, &attr, uevq_thread, NULL);
 
-	memset(&snl, 0x00, sizeof(struct sockaddr_nl));
-	snl.nl_family = AF_NETLINK;
-	snl.nl_pid = getpid();
-	snl.nl_groups = 0xffffffff;
+	/*
+	 * First check whether we have a udev socket
+	 */
+	memset(&sun, 0x00, sizeof(struct sockaddr_un));
+	sun.sun_family = AF_LOCAL;
+	strcpy(&sun.sun_path[1], "/org/kernel/udev/mpathevent");
+	addrlen = offsetof(struct sockaddr_un, sun_path) + strlen(sun.sun_path+1) + 1;
 
-	sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
+	sock = socket(AF_LOCAL, SOCK_DGRAM, 0);
 	if (sock == -1) {
 		condlog(0, "error getting socket, exit");
 		return 1;
 	}
 
-	/*
-	 * try to avoid dropping uevents, even so, this is not a guarantee,
-	 * but it does help to change the netlink uevent socket's
-	 * receive buffer threshold from the default value of 106,496 to
-	 * the maximum value of 262,142.
-	 */
-	retval = setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbufsz,
-			    sizeof(rcvbufsz));
+	condlog(3, "reading events from udev socket.");
 
-	if (retval < 0) {
-		condlog(0, "error setting receive buffer size for socket, exit");
-		exit(1);
-	}
-	retval = getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvsz, prcvszsz);
-
-	if (retval < 0) {
-		condlog(0, "error setting receive buffer size for socket, exit");
-		exit(1);
-	}
-	condlog(3, "receive buffer size for socket is %u.", rcvsz);
-
-	retval = bind(sock, (struct sockaddr *) &snl,
-		      sizeof(struct sockaddr_nl));
+	/* the bind takes care of ensuring only one copy running */
+	retval = bind(sock, (struct sockaddr *) &sun, addrlen);
 	if (retval < 0) {
 		condlog(0, "bind failed, exit");
 		goto exit;
 	}
+
+	/* enable receiving of the sender credentials */
+	setsockopt(sock, SOL_SOCKET, SO_PASSCRED,
+		   &feature_on, sizeof(feature_on));
+
 
 	while (1) {
 		static char buff[HOTPLUG_BUFFER_SIZE + OBJECT_SIZE];
