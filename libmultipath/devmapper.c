@@ -6,6 +6,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <libdevmapper.h>
 #include <ctype.h>
@@ -140,7 +141,6 @@ dm_simplecmd (int task, const char *name) {
 		goto out;
 
 	dm_task_no_open_count(dmt);
-	dm_task_skip_lockfs(dmt);       /* for DM_DEVICE_RESUME */
 
 	r = dm_task_run (dmt);
 
