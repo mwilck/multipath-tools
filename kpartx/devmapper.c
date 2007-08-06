@@ -136,27 +136,40 @@ out:
 	return r;
 }
 
-
 char *
 dm_mapname(int major, int minor)
 {
 	struct dm_task *dmt;
+	struct dm_names *names;
+	unsigned next = 0;
 	char *mapname = NULL;
-	const char *map;
+	dev_t dev;
 
-	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
+	dev = makedev(major, minor);
+
+	if (!(dmt = dm_task_create(DM_DEVICE_LIST)))
 		return NULL;
 
 	dm_task_no_open_count(dmt);
-	dm_task_set_major(dmt, major);
-	dm_task_set_minor(dmt, minor);
 
 	if (!dm_task_run(dmt))
 		goto out;
 
-	map = dm_task_get_name(dmt);
-	if (map && strlen(map))
-		mapname = strdup(map);
+	if (!(names = dm_task_get_names(dmt)))
+		goto out;
+
+	if (!names->dev) {
+		goto out;
+	}
+
+	do {
+		names = (void *) names + next;
+		if (names->dev == dev) {
+			mapname = strdup (names->name);
+			goto out;
+		}
+		next = names->next;
+	} while (next);
 
 out:
 	dm_task_destroy(dmt);

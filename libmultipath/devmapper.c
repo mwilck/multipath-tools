@@ -738,18 +738,18 @@ out:
 char *
 dm_mapname(int major, int minor)
 {
-	char * response = NULL;
-	const char *map;
 	struct dm_task *dmt;
+	struct dm_names *names;
+	unsigned next = 0;
+	char *mapname = NULL;
+	dev_t dev;
 	int r;
 	int loop = MAX_WAIT * LOOPS_PER_SEC;
 
-	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
-		return NULL;
+	dev = makedev(major,minor);
 
-	if (!dm_task_set_major(dmt, major) ||
-	    !dm_task_set_minor(dmt, minor))
-		goto bad;
+	if (!(dmt = dm_task_create(DM_DEVICE_LIST)))
+		return NULL;
 
 	dm_task_no_open_count(dmt);
 
@@ -768,19 +768,30 @@ dm_mapname(int major, int minor)
 
 	if (!r) {
 		condlog(0, "%i:%i: timeout fetching map name", major, minor);
-		goto bad;
+		goto out;
 	}
 
-	map = dm_task_get_name(dmt);
-	if (map && strlen(map))
-		response = STRDUP((char *)dm_task_get_name(dmt));
+	if (!(names = dm_task_get_names(dmt)))
+		goto out;
 
+	if (!names->dev) {
+		goto out;
+	}
+
+	do {
+		names = (void *) names + next;
+		if (names->dev == dev) {
+			mapname = strdup (names->name);
+			goto out;
+		}
+		next = names->next;
+	} while (next);
+
+out:
 	dm_task_destroy(dmt);
-	return response;
-bad:
-	dm_task_destroy(dmt);
-	condlog(0, "%i:%i: error fetching map name", major, minor);
-	return NULL;
+	if (!mapname)
+		condlog(0, "%i:%i: error fetching map name", major, minor);
+	return mapname;
 }
 
 int
