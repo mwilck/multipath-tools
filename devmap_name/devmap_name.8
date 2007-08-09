@@ -2,15 +2,23 @@
 .SH NAME
 devmap_name \- Query device-mapper name
 .SH SYNOPSIS
-.BI devmap_name " major minor"
+.B devmap_name
+.RB [\| \-l\ \c
+.IR seconds \|]
+.RB [\| \-t\ \c
+.IR type \|]
+.RB [\| \-v \|]
+.RB [\| device \]
 .SH DESCRIPTION
 .B devmap_name
 queries the device-mapper for the name for the device
 specified by
-.I major
-and
-.I minor
-number.
+.I device.
+The device can be given either 
+.I major minor
+or
+.I major:minor
+number. It will only return the name if the device is accessible.
 .br
 .B devmap_name
 can be called from
@@ -22,6 +30,19 @@ by the following rule in
 KERNEL="dm-[0-9]*", PROGRAM="/sbin/devmap_name %M %m", \\
 	NAME="%k", SYMLINK="%c"
 .fi
+.SH OPTIONS
+.TP
+.B \-l \fIseconds\fB
+Number of seconds to wait before timeout on an inaccessible
+device-mapper device.
+.TP
+.B \-t \fItype\fB
+Only print table name for device-mapper tables of type
+.I type
+.TP
+.B \-v
+Verbose output
+
 .SH "SEE ALSO"
 .BR udev (8),
 .BR dmsetup (8)
