@@ -9,6 +9,7 @@
 #include "emc_clariion.h"
 #include "rdac.h"
 #include "readsector0.h"
+#include "cciss.h"
 
 static struct checker checkers[] = {
 	{
@@ -65,6 +66,17 @@ static struct checker checkers[] = {
 		.init       = readsector0_init,
 		.free       = readsector0_free
 	},
+
+	{
+		.fd         = 0,
+		.name       = CCISS_TUR,
+		.message    = "",
+		.context    = NULL,
+		.check      = cciss_tur,
+		.init       = cciss_init,
+		.free       = cciss_free
+	},
+
 	{0, "", "", NULL, NULL, NULL, NULL},
 };
 

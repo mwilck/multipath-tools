@@ -167,7 +167,7 @@ static struct hwentry default_hw[] = {
 		.rr_weight     = RR_WEIGHT_NONE,
 		.no_path_retry = NO_PATH_RETRY_UNDEF,
 		.minio         = DEFAULT_MINIO,
-		.checker_name  = TUR,
+		.checker_name  = CCISS_TUR,
 	},
 	/*
 	 * DDN controller family
