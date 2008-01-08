@@ -68,6 +68,8 @@ adopt_paths (vector pathvec, struct multipath * mpp)
 			if (!find_path_by_dev(mpp->paths, pp->dev) &&
 			    store_path(mpp->paths, pp))
 					return 1;
+			/* Recalculate path priority */
+			pp->priority = PRIO_UNDEF;
 			pathinfo(pp, conf->hwtable, DI_PRIO | DI_CHECKER);
 		}
 	}

@@ -722,6 +722,59 @@ alias_handler(vector strvec)
 }
 
 static int
+mp_prio_callout_handler(vector strvec)
+{
+	struct mpentry * mpe = VECTOR_LAST_SLOT(conf->mptable);
+
+	if (!mpe)
+		return 1;
+
+	mpe->getprio = set_value(strvec);
+
+	if (!mpe->getprio)
+		return 1;
+
+	if (strlen(mpe->getprio) == 4 && !strcmp(mpe->getprio, "none")) {
+		FREE(mpe->getprio);
+		mpe->getprio = NULL;
+	}
+
+	return 0;
+}
+
+static int
+mp_features_handler(vector strvec)
+{
+	struct mpentry * mpe = VECTOR_LAST_SLOT(conf->mptable);
+	
+	if (!mpe)
+		return 1;
+
+	mpe->features = set_value(strvec);
+
+	if (!mpe->features)
+		return 1;
+
+	return 0;
+}
+
+static int
+mp_hw_handler_handler(vector strvec)
+{
+	struct mpentry * mpe = VECTOR_LAST_SLOT(conf->mptable);
+	
+	if (!mpe)
+		return 1;
+
+	mpe->hwhandler = set_value(strvec);
+
+	if (!mpe->hwhandler)
+		return 1;
+
+	return 0;
+}
+
+static int
 mp_pgpolicy_handler(vector strvec)
 {
 	char * buff;
@@ -848,6 +901,26 @@ mp_minio_handler(vector strvec)
 	return 0;
 }
 
+static int
+mp_path_checker_handler(vector strvec)
+{
+	char * buff;
+	struct mpentry * mpe = VECTOR_LAST_SLOT(conf->mptable);
+
+	if (!mpe)
+		return 1;
+
+	buff = set_value(strvec);
+
+	if (!buff)
+		return 1;
+
+	mpe->checker = checker_lookup(buff);
+	FREE(buff);
+
+	return 0;
+}
+
 /*
  * config file keywords printing
  */
@@ -886,6 +959,26 @@ snprint_mp_path_grouping_policy (char * buff, int len, void * data)
 	get_pgpolicy_name(str, POLICY_NAME_SIZE, mpe->pgpolicy);
 	
 	return snprintf(buff, len, "%s", str);
+}
+
+static int
+snprint_mp_prio_callout (char * buff, int len, void * data)
+{
+	struct mpentry * mpe = (struct mpentry *)data;
+
+	if (!conf->getprio && !mpe->getprio)
+		return 0;
+	if (!conf->getprio && mpe->getprio)
+		return snprintf(buff, len, "%s", mpe->getprio);
+	if (conf->getprio && !mpe->getprio)
+		return snprintf(buff, len, "none");
+
+	/* conf->getprio && hwe->getprio */
+	if (strlen(mpe->getprio) == strlen(conf->getprio) &&
+	    !strcmp(mpe->getprio, conf->getprio))
+		return 0;
+
+	return snprintf(buff, len, "%s", mpe->getprio);
 }
 
 static int
@@ -964,6 +1057,49 @@ snprint_mp_rr_min_io (char * buff, int len, void * data)
 		return 0;
 
 	return snprintf(buff, len, "%u", mpe->minio);
+}
+
+static int
+snprint_mp_path_checker (char * buff, int len, void * data)
+{
+	struct mpentry * mpe = (struct mpentry *)data;
+
+	if (!mpe->checker)
+		return 0;
+	if (!checker_selected(mpe->checker))
+		return 0;
+	if (mpe->checker == conf->checker)
+		return 0;
+	
+	return snprintf(buff, len, "%s", checker_name(mpe->checker));
+}
+
+static int
+snprint_mp_features (char * buff, int len, void * data)
+{
+	struct mpentry * mpe = (struct mpentry *)data;
+
+	if (!mpe->features)
+		return 0;
+	if (strlen(mpe->features) == strlen(conf->features) &&
+	    !strcmp(mpe->features, conf->features))
+		return 0;
+
+	return snprintf(buff, len, "%s", mpe->features);
+}
+
+static int
+snprint_mp_hw_hardware_handler (char * buff, int len, void * data)
+{
+	struct mpentry * mpe = (struct mpentry *)data;
+
+	if (!mpe->hwhandler)
+		return 0;
+	if (strlen(mpe->hwhandler) == strlen(conf->hwhandler) &&
+	    !strcmp(mpe->hwhandler, conf->hwhandler))
+		return 0;
+
+	return snprintf(buff, len, "%s", mpe->hwhandler);
 }
 
 static int
@@ -1453,6 +1589,10 @@ init_keywords(void)
 	install_keyword("alias", &alias_handler, &snprint_mp_alias);
 	install_keyword("path_grouping_policy", &mp_pgpolicy_handler, &snprint_mp_path_grouping_policy);
 	install_keyword("path_selector", &mp_selector_handler, &snprint_mp_selector);
+	install_keyword("path_checker", &mp_path_checker_handler, &snprint_mp_path_checker);
+	install_keyword("features", &mp_features_handler, &snprint_mp_features);
+	install_keyword("hardware_handler", &mp_hw_handler_handler, &snprint_mp_hw_hardware_handler);
+	install_keyword("prio_callout", &mp_prio_callout_handler, &snprint_mp_prio_callout);
 	install_keyword("failback", &mp_failback_handler, &snprint_mp_failback);
 	install_keyword("rr_weight", &mp_weight_handler, &snprint_mp_rr_weight);
 	install_keyword("no_path_retry", &mp_no_path_retry_handler, &snprint_mp_no_path_retry);

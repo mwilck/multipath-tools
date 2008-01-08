@@ -134,6 +134,11 @@ update_paths (struct multipath * mpp)
 				continue;
 			}
 			pp->mpp = mpp;
+			if (mpp->mpe && mpp->mpe->checker)
+				pp->state = PATH_UNCHECKED;
+			if (mpp->mpe && mpp->mpe->getprio)
+				pp->priority = PRIO_UNDEF;
+
 			if (pp->state == PATH_UNCHECKED)
 				pathinfo(pp, conf->hwtable, DI_CHECKER);
 
@@ -170,6 +175,11 @@ get_dm_mpvec (vector curmp, vector pathvec, char * refwwid)
 		condlog(3, "status = %s", mpp->status);
 
 		disassemble_map(pathvec, mpp->params, mpp);
+
+		if (mpp->wwid) {
+			mpp->mpe = find_mpe(mpp->wwid);
+			condlog(3, "wwid = %s", mpp->wwid);
+		}
 
 		/*
 		 * disassemble_map() can add new paths to pathvec.
@@ -263,7 +273,7 @@ configure (void)
 
 	if (conf->list > 1)
 		/* extended path info '-ll' */
-		di_flag |= DI_SYSFS | DI_CHECKER;
+		di_flag |= DI_SYSFS | DI_CHECKER | DI_PRIO;
 	else if (conf->list)
 		/* minimum path info '-l' */
 		di_flag |= DI_SYSFS;

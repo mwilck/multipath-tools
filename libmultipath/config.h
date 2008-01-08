@@ -35,13 +35,18 @@ struct mpentry {
 	char * wwid;
 	char * alias;
 	char * getuid;
+	char * getprio;
+	char * features;
+	char * hwhandler;
 	char * selector;
+	char * checker_name;
 
 	int pgpolicy;
 	int pgfailback;
 	int rr_weight;
 	int no_path_retry;
 	int minio;
+	struct checker * checker;
 };
 
 struct config {

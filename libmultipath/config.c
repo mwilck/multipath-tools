@@ -180,6 +180,15 @@ free_mpe (struct mpentry * mpe)
 	if (mpe->getuid)
 		FREE(mpe->getuid);
 
+	if (mpe->getprio)
+		FREE(mpe->getprio);
+
+	if (mpe->features)
+		FREE(mpe->features);
+
+	if (mpe->hwhandler)
+		FREE(mpe->hwhandler);
+
 	if (mpe->alias)
 		FREE(mpe->alias);
 

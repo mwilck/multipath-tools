@@ -712,6 +712,9 @@ get_prio (struct path * pp)
 	char buff[CALLOUT_MAX_SIZE];
 	char prio[16];
 
+	if (pp->priority == PRIO_UNDEF)
+		pp->getprio_selected = 0;
+
 	if (!pp->getprio_selected) {
 		select_getprio(pp);
 		pp->getprio_selected = 1;

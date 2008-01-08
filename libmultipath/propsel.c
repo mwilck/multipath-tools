@@ -185,6 +185,12 @@ select_alias (struct multipath * mp)
 extern int
 select_features (struct multipath * mp)
 {
+	if (mp->mpe && mp->mpe->features) {
+		mp->features = mp->mpe->features;
+		condlog(3, "%s: features = %s (LUN setting)",
+			mp->alias, mp->features);
+		return 0;
+	}
 	if (mp->hwe && mp->hwe->features) {
 		mp->features = mp->hwe->features;
 		condlog(3, "%s: features = %s (controller setting)",
@@ -200,6 +206,12 @@ select_features (struct multipath * mp)
 extern int
 select_hwhandler (struct multipath * mp)
 {
+	if (mp->mpe && mp->mpe->hwhandler) {
+		mp->hwhandler = mp->mpe->hwhandler;
+		condlog(3, "%s: hwhandler = %s (LUN setting)",
+			mp->alias, mp->hwhandler);
+		return 0;
+	}
 	if (mp->hwe && mp->hwe->hwhandler) {
 		mp->hwhandler = mp->hwe->hwhandler;
 		condlog(3, "%s: hwhandler = %s (controller setting)",
@@ -217,6 +229,12 @@ select_checker(struct path *pp)
 {
 	struct checker * c = &pp->checker;
 
+	if (pp->mpp && pp->mpp->mpe && pp->mpp->mpe->checker) {
+		checker_get(c, pp->mpp->mpe->checker);
+		condlog(3, "%s: path checker = %s (LUN setting)",
+			pp->dev, checker_name(c));
+		return 0;
+	}
 	if (pp->hwe && pp->hwe->checker) {
 		checker_get(c, pp->hwe->checker);
 		condlog(3, "%s: path checker = %s (controller setting)",
@@ -259,6 +277,12 @@ select_getuid (struct path * pp)
 extern int
 select_getprio (struct path * pp)
 {
+	if (pp->mpp && pp->mpp->mpe && pp->mpp->mpe->getprio) {
+		pp->getprio = pp->mpp->mpe->getprio;
+		condlog(3, "%s: getprio = %s (LUN setting)",
+			pp->dev, pp->getprio);
+		return 0;
+	}
 	if (pp->hwe && pp->hwe->getprio) {
 		pp->getprio = pp->hwe->getprio;
 		condlog(3, "%s: getprio = %s (controller setting)",
