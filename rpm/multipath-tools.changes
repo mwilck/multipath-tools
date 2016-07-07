@@ -1,5 +1,17 @@
 -------------------------------------------------------------------
-Fri Nov  6 13:35:22 CET 2015 - hare@suse.de
+Thu Jul  7 12:29:06 CEST 2016 - hare@suse.de
+
+- uxlsnr: avoid potential memory overflow allocating polls
+- libmultipath: correctly zero out cookie in dm_simplecmd
+- multipathd: enter IDLE mode before sleeping in checkerloop()
+- multipathd: avoid accessing configuration in IDLE
+- Revert 'multipathd: Do not update the paths vec when removing paths'
+  (bsc#980933)
+- Fix systemd build requirements (bsc#983167)
+- multipathd: Rework cookie handling to match with upstream
+
+-------------------------------------------------------------------
+Wed Jul  6 13:35:22 CET 2015 - hare@suse.de
 
 - Fixes for md_monitor on zFCP (FATE#319070):
   * strict loop timings
@@ -7,7 +19,7 @@ Fri Nov  6 13:35:22 CET 2015 - hare@suse.de
   * multipathd: implement 'show map $map format $format
 
 -------------------------------------------------------------------
-Wed Apr  6 15:53:37 CEST 2016 - hare@suse.de
+Thu Mar 24 09:49:45 CET 2016 - hare@suse.de
 
 - multipathd: do not flush maps on startup
 - Use find_path_by_dev() where possible (bsc#924316)
