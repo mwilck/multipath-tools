@@ -682,9 +682,8 @@ main (int argc, char *argv[])
 				       "multipath device path\n", dev);
 				goto out;
 			}
-			goto out;
-		}
-		mpath_disconnect(fd);
+		} else
+			mpath_disconnect(fd);
 	}
 	if (cmd == CMD_REMOVE_WWID && !dev) {
 		condlog(0, "the -w option requires a device");
