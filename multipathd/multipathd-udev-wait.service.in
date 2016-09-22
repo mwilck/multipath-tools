@@ -1,0 +1,18 @@
+[Unit]
+Description=Tell multipathd to wait for udev
+Documentation=man:multipathd(8)
+DefaultDependencies=no
+Wants=systemd-udevd.service
+Requires=multipathd-udev-settled.service
+After=systemd-udevd-control.socket
+Before=systemd-udevd-trigger.service multipathd.service
+ConditionPathIsReadWrite=/@RUN@
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/touch /@RUN@/.udev_trigger_running
+ExecStop=/usr/bin/rm -f /@RUN@/.udev_trigger_running
+
+[Install]
+WantedBy=multipathd.service

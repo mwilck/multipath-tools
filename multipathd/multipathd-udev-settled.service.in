@@ -1,0 +1,18 @@
+[Unit]
+Description=Tell multipathd udev has settled
+Documentation=man:multipathd(8)
+DefaultDependencies=no
+Wants=systemd-udev-settle.service multipathd.service
+After=systemd-udev-settle.service multipathd.service
+Before=iscsi.service iscsid.service lvm2-lvmetad.service lvm2-activation.service
+Before=local-fs-pre.target blk-availability.service
+ConditionPathIsReadWrite=/@RUN@
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/rm -f /@RUN@/.udev_trigger_running
+ExecStartPost=/sbin/multipathd reconfigure
+
+[Install]
+WantedBy=multipathd.service

@@ -37,11 +37,16 @@ OBJS = main.o pidfile.o uxlsnr.o uxclnt.o cli.o cli_handlers.o
 #
 # directives
 #
-all : $(EXEC)
+all : $(EXEC) $(EXEC)-udev-wait.service $(EXEC)-udev-settled.service
 
 $(EXEC): $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $(EXEC)
 	$(GZIP) $(EXEC).8 > $(EXEC).8.gz
+
+$(EXEC)-udev-wait.service:	$(EXEC)-udev-wait.service.in
+	sed 's/@RUN@/$(RUN)/g' $< >$@
+$(EXEC)-udev-settled.service:	$(EXEC)-udev-settled.service.in
+	sed 's/@RUN@/$(RUN)/g' $< >$@
 
 install:
 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(bindir)
@@ -50,6 +55,8 @@ ifdef SYSTEMD
 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(unitdir)
 	$(INSTALL_PROGRAM) -m 644 $(EXEC).service $(DESTDIR)$(unitdir)
 	$(INSTALL_PROGRAM) -m 644 $(EXEC).socket $(DESTDIR)$(unitdir)
+	$(INSTALL_PROGRAM) -m 644 $(EXEC)-udev-wait.service $(DESTDIR)$(unitdir)
+	$(INSTALL_PROGRAM) -m 644 $(EXEC)-udev-settled.service $(DESTDIR)$(unitdir)
 endif
 	$(INSTALL_PROGRAM) -d $(DESTDIR)$(mandir)
 	$(INSTALL_PROGRAM) -m 644 $(EXEC).8.gz $(DESTDIR)$(mandir)
