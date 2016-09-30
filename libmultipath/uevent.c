@@ -147,6 +147,48 @@ uevq_cleanup(struct list_head *tmpq)
 	}
 }
 
+struct thread_start {
+	pthread_mutex_t lock;
+	pthread_cond_t cond;
+	volatile int may_run;
+};
+
+#define THREAD_START_INIT {                \
+        .lock = PTHREAD_MUTEX_INITIALIZER, \
+	.cond = PTHREAD_COND_INITIALIZER,  \
+	.may_run = 0                       \
+}
+
+struct thread_start monitor_start = THREAD_START_INIT;
+struct thread_start dispatch_start = THREAD_START_INIT;
+
+#define THREAD_START_GET(type) ((type) == UEVENT_MONITOR_THREAD ? \
+				&monitor_start : &dispatch_start)
+
+static void uevent_wait_start(enum uevent_thread_type type)
+{
+	struct thread_start *thr = THREAD_START_GET(type);
+	if (thr->may_run)
+		return;
+	pthread_mutex_lock(&thr->lock);
+	pthread_cond_wait(&thr->cond, &thr->lock);
+	pthread_mutex_unlock(&thr->lock);
+	condlog(2, "uevent %s thread got start signal",
+		type == UEVENT_MONITOR_THREAD ? "monitor" : "dispatch");
+	pthread_testcancel();
+}
+
+void uevent_start_thread(enum uevent_thread_type type)
+{
+	struct thread_start *thr = THREAD_START_GET(type);
+	if (thr->may_run)
+		return;
+	pthread_mutex_lock(&thr->lock);
+	thr->may_run = 1;
+	pthread_cond_signal(&thr->cond);
+	pthread_mutex_unlock(&thr->lock);
+}
+
 /*
  * Service the uevent queue.
  */
@@ -157,6 +199,8 @@ int uevent_dispatch(int (*uev_trigger)(struct uevent *, void * trigger_data),
 	my_trigger_data = trigger_data;
 
 	mlockall(MCL_CURRENT | MCL_FUTURE);
+
+	uevent_wait_start(UEVENT_DISPATCH_THREAD);
 
 	while (1) {
 		LIST_HEAD(uevq_tmp);
@@ -526,6 +570,9 @@ int uevent_listen(struct udev *udev)
 							      NULL);
 	if (err)
 		condlog(2, "failed to create filter : %s", strerror(-err));
+
+	uevent_wait_start(UEVENT_MONITOR_THREAD);
+
 	err = udev_monitor_enable_receiving(monitor);
 	if (err) {
 		condlog(2, "failed to enable receiving : %s", strerror(-err));

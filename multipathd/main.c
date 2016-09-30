@@ -2369,6 +2369,11 @@ child (void * param)
 		if (running_state == DAEMON_CONFIGURE) {
 			pthread_cleanup_push(cleanup_lock, &vecs->lock);
 			lock(vecs->lock);
+			/*
+			 * Start monitoring udev.
+			 * This is a noop after the first call.
+			 */
+			uevent_start_thread(UEVENT_MONITOR_THREAD);
 			pthread_testcancel();
 			if (!need_to_delay_reconfig(vecs)) {
 				reconfigure(vecs);
@@ -2379,6 +2384,11 @@ child (void * param)
 			}
 			lock_cleanup_pop(vecs->lock);
 			post_config_state(DAEMON_IDLE);
+			/*
+			 * Start processing udev events.
+			 * This is a noop after the first call.
+			 */
+			uevent_start_thread(UEVENT_DISPATCH_THREAD);
 		}
 	}
 
@@ -2395,6 +2405,10 @@ child (void * param)
 	pthread_cancel(uevent_thr);
 	pthread_cancel(uxlsnr_thr);
 	pthread_cancel(uevq_thr);
+
+	/* Shutdown - start uevent threads incase they're still waiting */
+	uevent_start_thread(UEVENT_MONITOR_THREAD);
+	uevent_start_thread(UEVENT_DISPATCH_THREAD);
 
 	lock(vecs->lock);
 	free_pathvec(vecs->pathvec, FREE_PATHS);

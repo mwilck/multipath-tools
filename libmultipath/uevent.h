@@ -26,7 +26,13 @@ struct uevent {
 	char *envp[HOTPLUG_NUM_ENVP];
 };
 
+enum uevent_thread_type {
+	UEVENT_MONITOR_THREAD,
+	UEVENT_DISPATCH_THREAD
+};
+
 int is_uevent_busy(void);
+void uevent_start_thread(enum uevent_thread_type type);
 void setup_thread_attr(pthread_attr_t *attr, size_t stacksize, int detached);
 
 int uevent_listen(struct udev *udev);
