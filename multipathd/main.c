@@ -138,6 +138,8 @@ daemon_status(void)
 		return "running";
 	case DAEMON_SHUTDOWN:
 		return "shutdown";
+	case DAEMON_WAITING:
+		return "waiting";
 	}
 	return NULL;
 }
@@ -161,6 +163,8 @@ sd_notify_status(void)
 		return "STATUS=running";
 	case DAEMON_SHUTDOWN:
 		return "STATUS=shutdown";
+	case DAEMON_WAITING:
+		return "STATUS=waiting";
 	}
 	return NULL;
 }
@@ -2209,6 +2213,97 @@ set_oom_adj (void)
 	condlog(0, "couldn't adjust oom score");
 }
 
+int
+wait_for_status_change(int secs)
+{
+	struct timespec start, end;
+
+	clock_gettime(CLOCK_REALTIME, &start);
+	end = start;
+	end.tv_sec += secs;
+	pthread_mutex_lock(&config_lock);
+	pthread_cond_timedwait(&config_cond,
+			       &config_lock, &end);
+	pthread_mutex_unlock(&config_lock);
+	clock_gettime(CLOCK_REALTIME, &end);
+
+	/* second precision is sufficient, don't return 0 */
+	return end.tv_sec - start.tv_sec + 1;
+}
+
+int check_path_exists(const char * path)
+{
+	struct stat dummy;
+
+	int rc = stat(path, &dummy);
+	if (rc == -1) {
+		if (errno == ENOENT)
+			return 0;
+		else {
+			condlog(0, "error %m opening %s", path);
+			return -1;
+		}
+	} else
+		return 1;
+}
+
+int wait_for_udev_settle(void)
+{
+	/*
+	 * Delayed multipathd startup.
+	 *
+	 * During system boot, "multipathd-udev-wait.service" creates
+	 * the UDEV_TRIGGER marker file as an indicator that udev device 
+	 * discovery is running.
+	 *
+	 * When multipathd sees this file, it enters a wait state during which
+	 * only the Unix socket listener thread is actually running.
+	 *
+	 * The wait state is left when the daemon enters DAEMON_CONFIGURE state
+	 * by receiving a "reconfigure" command on the Unix socket, or if
+	 * a timeout occurs (we use 240s, 60s more than the udev settle 
+	 * timeout). This wakes up the main thread, which will trigger the
+	 * uevent monitor and dispatcher threads shortly after.
+	 * 
+	 * During system boot, after udev settle has finished, 
+	 * "multipathd-udev-settled.service" deletes the marker file and runs 
+	 * "multipathd reconfigure" to wakeup multipathd.
+	 *
+	 * The rationale for this delay is that running multipathd's 
+	 * reconfigure() during initial device detection is racy and error-
+	 * prone, and delaying multipathd startup until after udev settle
+	 * is problematic as well.
+	 */
+	const char UDEV_TRIGGER[] = "/" RUN_DIR "/.udev_trigger_running";
+	const int MAX_WAIT = 240;
+	int ret = 1, secs;
+
+	if (check_path_exists(UDEV_TRIGGER) != 1) {
+		ret = 0;
+		goto finish;
+	}
+
+	post_config_state(DAEMON_WAITING);
+	condlog(1, "waiting for udev settle");
+
+	for (secs = MAX_WAIT;
+	     running_state != DAEMON_CONFIGURE && secs >= 0;
+	     secs -= wait_for_status_change(secs)); /* do nothing */
+
+	if (running_state != DAEMON_CONFIGURE)
+		condlog(1, "timeout waiting for udev settle");
+	else if (check_path_exists(UDEV_TRIGGER) == 1)
+		condlog(0, "Error: %s still exists", UDEV_TRIGGER);
+	else {
+		condlog(2, "finished waiting for udev settle");
+		ret = 0;
+	}
+
+finish:
+	post_config_state(DAEMON_CONFIGURE);
+	return ret;
+}
+
 static int
 child (void * param)
 {
@@ -2334,14 +2429,6 @@ child (void * param)
 	 */
 	conf = NULL;
 
-	/*
-	 * Signal start of configuration
-	 */
-	post_config_state(DAEMON_CONFIGURE);
-
-	/*
-	 * Start uevent listener early to catch events
-	 */
 	if ((rc = pthread_create(&uevent_thr, &uevent_attr, ueventloop, udev))) {
 		condlog(0, "failed to create uevent thread: %d", rc);
 		goto failed;
@@ -2368,6 +2455,11 @@ child (void * param)
 #ifdef USE_SYSTEMD
 	sd_notify(0, "READY=1");
 #endif
+
+	/*
+	 * When this returns, state is DAEMON_CONFIGURE
+	 */
+	wait_for_udev_settle();
 
 	while (running_state != DAEMON_SHUTDOWN) {
 		pthread_cleanup_push(config_cleanup, NULL);

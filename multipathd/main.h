@@ -10,6 +10,7 @@ enum daemon_status {
 	DAEMON_IDLE,
 	DAEMON_RUNNING,
 	DAEMON_SHUTDOWN,
+	DAEMON_WAITING,
 };
 
 struct prout_param_descriptor;
