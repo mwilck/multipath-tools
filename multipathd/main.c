@@ -210,6 +210,15 @@ int set_config_state(enum daemon_status state)
 	return rc;
 }
 
+void wait_config_state(enum daemon_status state)
+{
+	pthread_cleanup_push(config_cleanup, NULL);
+	pthread_mutex_lock(&config_lock);
+	while (running_state != state)
+		pthread_cond_wait(&config_cond, &config_lock);
+	pthread_cleanup_pop(1);
+}
+
 struct config *get_multipath_config(void)
 {
 	rcu_read_lock();
@@ -1740,6 +1749,8 @@ checkerloop (void *ap)
 	rcu_register_thread();
 	mlockall(MCL_CURRENT | MCL_FUTURE);
 	vecs = (struct vectors *)ap;
+
+	wait_config_state(DAEMON_CONFIGURE);
 	condlog(2, "path checkers start up");
 
 	/*
