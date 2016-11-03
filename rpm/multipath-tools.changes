@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Thu Nov 06 21:49:30 CET 2016 - mwilck@suse.de
+
+- Backported changes from SP1 branch to GA branch (bsc#1006118)
+  Backport starts after Mar 24, 2016 entry below.
+  Code is equivalent to 064b410 on the sles12-sp1 branch.
+
+-------------------------------------------------------------------
 Wed Sep 28 12:03:30 UTC 2016 - mwilck@suse.de
 
 - Backported reassign_maps support to SLES12-SP1 (bsc#999522)
