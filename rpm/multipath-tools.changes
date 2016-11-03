@@ -1,5 +1,13 @@
 -------------------------------------------------------------------
-Thu Nov 06 21:49:30 CET 2016 - mwilck@suse.de
+Thu Nov 03 21:01:41 UTC 2016 - mwilck@suse.de
+
+- multipathd: issue systemd READY after initial configuration
+  (bsc#1006469, bsc#1006118)
+- multipathd: skip conf==NULL check in socket listener thread
+  (bsc#1005414, bsc#1006118)
+
+-------------------------------------------------------------------
+Thu Nov 03 20:49:30 UTC 2016 - mwilck@suse.de
 
 - Backported changes from SP1 branch to GA branch (bsc#1006118)
   Backport starts after Mar 24, 2016 entry below.
@@ -8,7 +16,7 @@ Thu Nov 06 21:49:30 CET 2016 - mwilck@suse.de
 -------------------------------------------------------------------
 Wed Sep 28 12:03:30 UTC 2016 - mwilck@suse.de
 
-- Backported reassign_maps support to SLES12-SP1 (bsc#999522)
+- Backported find_multipaths support to SLES12-SP1 (bsc#999522)
 
 - multpath.conf(5): fix reassign_maps section
 - Add find_multipaths to multipath.conf man page
@@ -61,7 +69,7 @@ Thu Jul  7 12:29:06 CEST 2016 - hare@suse.de
 - multipathd: Rework cookie handling to match with upstream
 
 -------------------------------------------------------------------
-Wed Jul  6 13:35:22 CET 2015 - hare@suse.de
+Wed Jul  6 13:35:22 CET 2016 - hare@suse.de
 
 - Fixes for md_monitor on zFCP (FATE#319070):
   * strict loop timings
