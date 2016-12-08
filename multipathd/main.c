@@ -408,7 +408,7 @@ ev_add_map (char * dev, char * alias, struct vectors * vecs)
 		condlog(2, "%s: devmap %s registered", alias, dev);
 		return 0;
 	}
-	r = get_refwwid(dev, DEV_DEVMAP, vecs->pathvec, &refwwid);
+	r = get_refwwid(dev, DEV_DEVMAP, vecs->pathvec, &refwwid, NULL);
 
 	if (refwwid) {
 		r = coalesce_paths(vecs, NULL, refwwid, 0);

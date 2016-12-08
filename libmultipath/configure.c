@@ -920,12 +920,16 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid, int force_r
  * 0 - success
  * 1 - failure
  * 2 - blacklist
+ *
+ * if dev refers to a path and path_out is not NULL, sets path_out to
+ * the struct path just filled in
  */
 extern int
-get_refwwid (char * dev, enum devtypes dev_type, vector pathvec, char **wwid)
+get_refwwid (char * dev, enum devtypes dev_type, vector pathvec, char **wwid,
+	struct path **path_out)
 {
 	int ret = 1;
-	struct path * pp;
+	struct path * pp = NULL;
 	char buff[FILE_NAME_SIZE];
 	char * refwwid = NULL, tmpwwid[WWID_SIZE];
 
@@ -1060,6 +1064,8 @@ check:
 		}
 	}
 out:
+	if (pp != NULL && path_out != NULL)
+		*path_out = pp;
 	if (refwwid && strlen(refwwid)) {
 		*wwid = STRDUP(refwwid);
 		return 0;

@@ -28,6 +28,7 @@ int setup_map (struct multipath * mpp, char * params, int params_size );
 int domap (struct multipath * mpp, char * params);
 int reinstate_paths (struct multipath *mpp);
 int coalesce_paths (struct vectors *vecs, vector curmp, char * refwwid, int force_reload);
-int get_refwwid (char * dev, enum devtypes dev_type, vector pathvec, char **wwid);
+int get_refwwid (char * dev, enum devtypes dev_type, vector pathvec,
+		 char **wwid, struct path **path_out);
 int reload_map(struct vectors *vecs, struct multipath *mpp, int refresh);
 int sysfs_get_host_adapter_name(struct path *pp, char *adapter_name);

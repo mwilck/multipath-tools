@@ -282,7 +282,7 @@ configure (void)
 	 */
 	if (conf->dev) {
 		int failed = get_refwwid(conf->dev, conf->dev_type, pathvec,
-					 &refwwid);
+					 &refwwid, NULL);
 		if (!refwwid) {
 			if (failed == 2 && conf->cmd == CMD_VALID_PATH)
 				printf("%s is not a valid multipath device path\n", conf->dev);
