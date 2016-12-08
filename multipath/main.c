@@ -30,6 +30,9 @@
 #include <libudev.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <limits.h>
+#include <stdlib.h>
 
 #include <checkers.h>
 #include <prio.h>
@@ -233,6 +236,94 @@ get_dm_mpvec (vector curmp, vector pathvec, char * refwwid)
 }
 
 static int
+is_used_by_multipath(struct udev_device *ud)
+{
+	int ret = 0;
+	const char *sp;
+	char pathname[PATH_SIZE];
+	char *holdername = NULL;
+	int rv;
+	DIR *hdir = NULL;
+	struct dirent *holder;
+	struct udev *udev;
+	struct udev_device *dm_ud = NULL;
+	const char *dm_name;
+
+	udev = udev_device_get_udev(ud);
+	if (udev == NULL) {
+		condlog(1, "%s: error retrieving udev context", __func__);
+		return 0;
+	}
+	sp = udev_device_get_syspath(ud);
+	if (sp == NULL) {
+		condlog(1, "%s: error retrieving syspath", __func__);
+		return 0;
+	}
+	rv = snprintf(pathname, sizeof(pathname), "%s/holders", sp);
+	if (rv < 0 || rv >= sizeof(pathname)) {
+		condlog(1, "%s: error in snprintf", __func__);
+		return 0;
+	}
+	hdir = opendir(pathname);
+	if (hdir == NULL) {
+		condlog(1, "%s: error in opendir: %m", __func__);
+		return 0;
+	}
+	while ((holder = readdir(hdir)) != NULL) {
+		if ((strcmp(holder->d_name,".") == 0) ||
+		    (strcmp(holder->d_name,"..") == 0))
+			continue;
+		if (!strncmp(holder->d_name, "dm-", 3)) {
+			rv = snprintf(pathname, sizeof(pathname),
+				      "%s/holders/%s",
+				      sp, holder->d_name);
+			if (rv < 0 || rv >= sizeof(pathname)) {
+				condlog(1, "%s: error in snprintf", __func__);
+				goto out;
+			}
+			holdername = realpath(pathname, NULL);
+			if (holdername == NULL) {
+				condlog(1, "%s: error in realpath: %m",
+					__func__);
+				goto out;
+			}
+			dm_ud = udev_device_new_from_syspath(udev, holdername);
+			if (dm_ud == NULL) {
+				condlog(1, "%s: error getting udev from %s",
+					__func__, holdername);
+				goto out_hn;
+			}
+			dm_name = udev_device_get_sysattr_value(dm_ud, "dm/name");
+			if (dm_name == NULL) {
+				condlog(1, "%s: error getting dm/name from %s",
+					__func__, holdername);
+				goto out_ud;
+			}
+			condlog(4, "%s: checking %s", __func__, dm_name);
+			rv = dm_type(dm_name, TGT_MPATH);
+			if (rv == 1) {
+				condlog(3, "%s: holder %s is multipath",
+					 __func__, dm_name);
+				ret = 1;
+			} else
+				condlog(3, "%s: holder %s is not multipath",
+					 __func__, dm_name);
+		} else
+			condlog(3, "%s: holder %s is not dm",
+				__func__, holder->d_name);
+		/* Never more than 1 holder for multipath */
+		break;
+	}
+out_ud:
+	udev_device_unref(dm_ud);
+out_hn:
+	free(holdername);
+out:
+	closedir(hdir);
+	return ret;
+}
+
+static int
 check_path_in_use(struct path *pp)
 {
 	const char *devnode;
@@ -265,9 +356,7 @@ check_path_in_use(struct path *pp)
 	}
 	if (errno == EBUSY) {
 		condlog(3, "%s: %s is in use", __func__, devnode);
-		/* Check for use by multipath to be implemented
-		 * Return 0 for now, in order not to break stuff */
-		return 0;
+		return !is_used_by_multipath(pp->udev);
 	} else {
 		condlog(1, "%s: open error for %s: %m", __func__, devnode);
 		return 1;
