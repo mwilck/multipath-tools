@@ -29,6 +29,7 @@
 #include <ctype.h>
 #include <libudev.h>
 #include <syslog.h>
+#include <fcntl.h>
 
 #include <checkers.h>
 #include <prio.h>
@@ -231,6 +232,47 @@ get_dm_mpvec (vector curmp, vector pathvec, char * refwwid)
 	return 0;
 }
 
+static int
+check_path_in_use(struct path *pp)
+{
+	const char *devnode;
+	int fd;
+	struct stat stt;
+	if (!pp || !pp->udev) {
+		condlog(1, "%s: called with empty path", __func__);
+		return 0;
+	}
+	devnode = udev_device_get_devnode(pp->udev);
+	if (!devnode) {
+		condlog(1, "%s: no devnode found for %s", __func__,
+			pp->dev);
+		return 0;
+	}
+	condlog(4, "%s: checking %s", __func__, devnode);
+	if (stat(devnode, &stt) == -1) {
+		condlog(1, "%s: stat error for %s: %m", __func__, devnode);
+		return 0;
+	}
+	if (!S_ISBLK(stt.st_mode)) {
+		condlog(1, "%s: %s is not a block device", __func__, devnode);
+		return 0;
+	}
+	fd = open(devnode, O_RDONLY|O_EXCL);
+	if (fd >= 0) {
+		close(fd);
+		condlog(3, "%s: %s is unused", __func__, devnode);
+		return 0;
+	}
+	if (errno == EBUSY) {
+		condlog(3, "%s: %s is in use", __func__, devnode);
+		/* Check for use by multipath to be implemented
+		 * Return 0 for now, in order not to break stuff */
+		return 0;
+	} else {
+		condlog(1, "%s: open error for %s: %m", __func__, devnode);
+		return 1;
+	}
+}
 
 /*
  * Return value:
@@ -248,6 +290,7 @@ configure (void)
 	int di_flag = 0;
 	char * refwwid = NULL;
 	char * dev = NULL;
+	struct path *pp = NULL;
 
 	/*
 	 * allocate core vectors to store paths and multipaths
@@ -282,7 +325,7 @@ configure (void)
 	 */
 	if (conf->dev) {
 		int failed = get_refwwid(conf->dev, conf->dev_type, pathvec,
-					 &refwwid, NULL);
+					 &refwwid, &pp);
 		if (!refwwid) {
 			if (failed == 2 && conf->cmd == CMD_VALID_PATH)
 				printf("%s is not a valid multipath device path\n", conf->dev);
@@ -311,6 +354,15 @@ configure (void)
 			goto out;
 		}
 		condlog(3, "scope limited to %s", refwwid);
+		if (conf->cmd == CMD_VALID_PATH && pp != NULL &&
+		    check_path_in_use(pp)) {
+			condlog(2, "possible configuration problem: "
+				"path %s is in use by a non-multipath holder",
+				conf->dev);
+			printf("%s is not a valid multipath device path\n",
+				conf->dev);
+			goto out;
+		}
 		/* If you are ignoring the wwids file and find_multipaths is
 		 * set, you need to actually check if there are two available
 		 * paths to determine if this path should be multipathed. To
