@@ -24,6 +24,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -198,6 +199,16 @@ update_paths (struct multipath * mpp)
 	return 0;
 }
 
+static long
+get_system_uptime(void)
+{
+	struct sysinfo si;
+	if (sysinfo(&si) == 0)
+		return si.uptime;
+	else
+		return -1;
+}
+
 static int
 get_dm_mpvec (enum mpath_cmds cmd, vector curmp, vector pathvec, char * refwwid)
 {
@@ -351,10 +362,15 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		 * there are multiple available paths for this device.
 		 * This check is put off until after discovering all paths.
 		 *
-		 * FIXME: At boot time, when the udev db isn't fully
+		 * At boot time, when the udev db isn't fully
 		 * initialized yet, that check may yield false negatives
 		 * because the other paths haven't been added
 		 * to the udev db yet.
+		 *
+		 * The "find_multipaths_boot_timeout" option can be used
+		 * to skip these checks at boot time. udev events for
+		 * single-path devices need to be retriggered when booting
+		 * has finished to avoid false positives.
 		 */
 		if (cmd == CMD_VALID_PATH) {
 			if (!conf->find_multipaths || !conf->ignore_wwids) {
@@ -364,6 +380,13 @@ configure (struct config *conf, enum mpath_cmds cmd,
 				goto out;
 			} else {
 				if (check_wwids_file(refwwid, 0) == 0) {
+					r = 0;
+					goto out;
+				}
+				if (get_system_uptime() <
+				    conf->find_multipaths_boot_timeout) {
+					condlog(2, "single path %s treated as multipath device path during boot",
+					devpath);
 					r = 0;
 					goto out;
 				}

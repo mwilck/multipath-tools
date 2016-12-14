@@ -36,6 +36,20 @@ set_int(vector strvec, void *ptr)
 }
 
 static int
+set_uint(vector strvec, void *ptr)
+{
+	unsigned int ui, *uint_ptr = (unsigned int *)ptr;
+	char * buff, *end;
+
+	buff = VECTOR_SLOT(strvec, 1);
+	ui = strtoul(buff, &end, 0);
+	if (!(*buff != '\0' && *end == '\0'))
+		return 1;
+	*uint_ptr = ui;
+	return 0;
+}
+
+static int
 set_str(vector strvec, void *ptr)
 {
 	char **str_ptr = (char **)ptr;
@@ -95,6 +109,13 @@ print_int (char *buff, int len, void *ptr)
 {
 	int *int_ptr = (int *)ptr;
 	return snprintf(buff, len, "%i", *int_ptr);
+}
+
+static int
+print_uint (char *buff, int len, void *ptr)
+{
+	unsigned int *uint_ptr = (unsigned int *)ptr;
+	return snprintf(buff, len, "%u", *uint_ptr);
 }
 
 static int
@@ -239,6 +260,8 @@ declare_def_snprint(partition_delim, print_str)
 
 declare_def_handler(find_multipaths, set_yes_no)
 declare_def_snprint(find_multipaths, print_yes_no)
+declare_def_handler(find_multipaths_boot_timeout, set_uint)
+declare_def_snprint(find_multipaths_boot_timeout, print_uint)
 
 declare_def_handler(selector, set_str)
 declare_def_snprint_defstr(selector, print_str, DEFAULT_SELECTOR)
@@ -1378,6 +1401,7 @@ init_keywords(vector keywords)
 	install_keyword("delay_watch_checks", &def_delay_watch_checks_handler, &snprint_def_delay_watch_checks);
 	install_keyword("delay_wait_checks", &def_delay_wait_checks_handler, &snprint_def_delay_wait_checks);
 	install_keyword("find_multipaths", &def_find_multipaths_handler, &snprint_def_find_multipaths);
+	install_keyword("find_multipaths_boot_timeout", &def_find_multipaths_boot_timeout_handler, &snprint_def_find_multipaths_boot_timeout);
 	install_keyword("uxsock_timeout", &def_uxsock_timeout_handler, &snprint_def_uxsock_timeout);
 	install_keyword("retrigger_tries", &def_retrigger_tries_handler, &snprint_def_retrigger_tries);
 	install_keyword("retrigger_delay", &def_retrigger_delay_handler, &snprint_def_retrigger_delay);

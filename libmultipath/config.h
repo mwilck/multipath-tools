@@ -123,6 +123,7 @@ struct config {
 	int log_checker_err;
 	int allow_queueing;
 	int find_multipaths;
+	unsigned int find_multipaths_boot_timeout;
 	uid_t uid;
 	gid_t gid;
 	mode_t mode;

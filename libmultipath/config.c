@@ -610,6 +610,8 @@ load_config (char * file)
 	conf->partition_delim = NULL;
 	conf->processed_main_config = 0;
 	conf->find_multipaths = DEFAULT_FIND_MULTIPATHS;
+	conf->find_multipaths_boot_timeout =
+		DEFAULT_FIND_MULTIPATHS_BOOT_TIMEOUT;
 	conf->uxsock_timeout = DEFAULT_REPLY_TIMEOUT;
 	conf->uid_attribute = set_default(DEFAULT_UID_ATTRIBUTE);
 	conf->retrigger_tries = DEFAULT_RETRIGGER_TRIES;

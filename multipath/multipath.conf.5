@@ -682,6 +682,22 @@ multipath devices, without having to edit the blacklist.
 Default value is: \fBno\fR
 .RE
 .TP
+.B find_multipaths_boot_timeout
+Timeout, in seconds after system boot, until single-path devices are ignored
+by multipath. If this value is > 0, and a non-blacklisted single path is encountered,
+multipath will wait until the given time after system boot for additional paths
+to the same device to appear. Only when the timeout has passed will the
+paths be released for use by other system components (file system mounts, LVM, etc.).
+This allows newly added multipath devices to be detected
+at boot time, even if they are not in listed in the WWIDs file, but it may
+also delay system boot by at most the specified timeout. If
+.I find_multipaths
+is not set, this option has no effect.
+.RS
+.TP
+Default value is: \fB0\fR
+.RE
+.TP
 .B uxsock_timeout
 CLI receive timeout in milliseconds. For larger systems CLI commands
 might timeout before the multipathd lock is released and the CLI command
