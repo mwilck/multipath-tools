@@ -98,6 +98,50 @@ filter_pathvec (vector pathvec, char * refwwid)
 	return 0;
 }
 
+/*
+ * Trigger "change" events for all single paths (multipath -T).
+ * Side effect: frees path data structures.
+ * That shouldn't be a problem because the function is called
+ * immediately before multipath exits.
+ */
+static int
+retrigger_single_paths(vector pathvec)
+{
+	int i, j, n, err = 0;
+	struct path *ppi, *ppj;
+	static const char change[] = "change";
+
+	vector_foreach_slot(pathvec, ppi, i) {
+		if (ppi == NULL)
+			/* path already seen */
+			continue;
+		n = 1;
+		j = i + 1;
+		vector_foreach_slot_after(pathvec, ppj, j) {
+			if (ppj == NULL)
+				continue;
+			if (strncmp(ppi->wwid, ppj->wwid, WWID_SIZE) == 0) {
+				n++;
+				/* Don't look at this slot again */
+				free_path(ppj);
+				pathvec->slot[j] = NULL;
+			}
+		}
+		if (n == 1) {
+			condlog(2, "%s is a single path, retrigger", ppi->wwid);
+			if (sysfs_attr_set_value(ppi->udev, "uevent",
+						 (char*)change,
+						 sizeof(change)) <= 0)
+				err++;
+		} else
+			condlog(3, "%s is multipath", ppi->wwid);
+	}
+	if (err)
+		condlog(1, "%s: %d errors trying to trigger events",
+			__func__, err);
+	return !!err;
+}
+
 static void
 usage (char * progname)
 {
@@ -435,6 +479,11 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		goto out;
 	}
 
+	if (cmd == CMD_RETRIGGER) {
+		r = retrigger_single_paths(pathvec);
+		goto out;
+	}
+
 	if (cmd != CMD_CREATE && cmd != CMD_DRY_RUN) {
 		r = 0;
 		goto out;
@@ -553,7 +602,7 @@ main (int argc, char *argv[])
 	if (!conf)
 		exit(1);
 	multipath_conf = conf;
-	while ((arg = getopt(argc, argv, ":adchl::FfM:v:p:b:BritquwW")) != EOF ) {
+	while ((arg = getopt(argc, argv, ":adchl::FfM:v:p:b:BritquwWT")) != EOF ) {
 		switch(arg) {
 		case 1: printf("optarg : %s\n",optarg);
 			break;
@@ -630,6 +679,9 @@ main (int argc, char *argv[])
 		case 'W':
 			cmd = CMD_RESET_WWIDS;
 			break;
+		case 'T':
+			cmd = CMD_RETRIGGER;
+			break;
 		case 'a':
 			cmd = CMD_ADD_WWID;
 			break;
@@ -695,6 +747,27 @@ main (int argc, char *argv[])
 	if (init_prio(conf->multipath_dir)) {
 		condlog(0, "failed to initialize prioritizers");
 		goto out;
+	}
+
+	if (cmd == CMD_RETRIGGER) {
+		long delay;
+		if (!conf->find_multipaths ||
+		    conf->find_multipaths_boot_timeout == 0) {
+			condlog(3, "-T: nothing to do, exiting");
+			r = 0;
+			goto out;
+		}
+		delay = conf->find_multipaths_boot_timeout
+			- get_system_uptime();
+		if (delay < 0)
+			delay = 0;
+		delay++;
+		condlog(2, "-T: udev retrigger after %ld seconds", delay);
+		if (daemon(1, 1) !=  0) {
+			condlog(0, "failed to run in the background");
+			goto out;
+		}
+		sleep(delay);
 	}
 
 	if (cmd == CMD_VALID_PATH &&

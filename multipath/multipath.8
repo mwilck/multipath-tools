@@ -89,6 +89,11 @@ remove the wwid for the specified device from the wwids file
 .B \-W
 reset the wwids file to only include the current multipath devices
 .TP
+.B \-T
+retrigger udev events for devices
+.I find_multipaths_boot_timeout
+seconds after system boot (to be used in system boot scripts)
+.TP
 .BI \-p " policy"
 force new maps to use the specified policy:
 .RS 1.2i
