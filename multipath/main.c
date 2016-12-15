@@ -336,17 +336,38 @@ configure (struct config *conf, enum mpath_cmds cmd,
 			goto out;
 		}
 		condlog(3, "scope limited to %s", refwwid);
-		/* If you are ignoring the wwids file and find_multipaths is
-		 * set, you need to actually check if there are two available
-		 * paths to determine if this path should be multipathed. To
-		 * do this, we put off the check until after discovering all
-		 * the paths */
-		if (cmd == CMD_VALID_PATH &&
-		    (!conf->find_multipaths || !conf->ignore_wwids)) {
-			if (conf->ignore_wwids ||
-			    check_wwids_file(refwwid, 0) == 0)
-				r = 0;
-			goto out;
+		/*
+		 * If find_multipaths is not set, we either lookup
+		 * paths in the WWIDs file (!ignore_wwids), or we assume
+		 * that every path should be multipathed (ignore_wwids).
+		 *
+		 * If find_multipaths is set, multipathd will grab all
+		 * paths in the WWIDs file. In order to be consistent,
+		 * we need to treat paths contained in the WWIDs file
+		 * as multipath device paths here as well.
+		 *
+		 * In the "ignore_wwids" case, even if the path is not in
+		 * the WWIDs file yet, we will go on checking
+		 * there are multiple available paths for this device.
+		 * This check is put off until after discovering all paths.
+		 *
+		 * FIXME: At boot time, when the udev db isn't fully
+		 * initialized yet, that check may yield false negatives
+		 * because the other paths haven't been added
+		 * to the udev db yet.
+		 */
+		if (cmd == CMD_VALID_PATH) {
+			if (!conf->find_multipaths || !conf->ignore_wwids) {
+				if (conf->ignore_wwids ||
+				    check_wwids_file(refwwid, 0) == 0)
+					r = 0;
+				goto out;
+			} else {
+				if (check_wwids_file(refwwid, 0) == 0) {
+					r = 0;
+					goto out;
+				}
+			}
 		}
 	}
 

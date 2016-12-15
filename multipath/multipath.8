@@ -56,7 +56,12 @@ print internal hardware table to stdout
 force devmap reload
 .TP
 .B \-i
-ignore wwids file when processing devices
+ignore wwids file: do not discard files that are not listed in the wwids
+file when processing devices. This option is only relevant together with the
+.I -i
+or
+.I -u
+options.
 .TP
 .B \-B
 treat the bindings file as read only
