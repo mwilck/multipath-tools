@@ -299,9 +299,6 @@ configure (struct config *conf, enum mpath_cmds cmd,
 	    cmd != CMD_REMOVE_WWID &&
 	    (filter_devnode(conf->blist_devnode,
 			    conf->elist_devnode, dev) > 0)) {
-		if (cmd == CMD_VALID_PATH)
-			printf("%s is not a valid multipath device path\n",
-			       devpath);
 		goto out;
 	}
 
@@ -314,9 +311,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 					 pathvec, &refwwid);
 		if (!refwwid) {
 			condlog(4, "%s: failed to get wwid", devpath);
-			if (failed == 2 && cmd == CMD_VALID_PATH)
-				printf("%s is not a valid multipath device path\n", devpath);
-			else
+			if (failed != 2 || cmd != CMD_VALID_PATH)
 				condlog(3, "scope is null");
 			goto out;
 		}
@@ -351,9 +346,6 @@ configure (struct config *conf, enum mpath_cmds cmd,
 			if (conf->ignore_wwids ||
 			    check_wwids_file(refwwid, 0) == 0)
 				r = 0;
-
-			printf("%s %s a valid multipath device path\n",
-			       devpath, r == 0 ? "is" : "is not");
 			goto out;
 		}
 	}
@@ -396,8 +388,6 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		 * the refwwid, then the path is valid */
 		if (VECTOR_SIZE(curmp) != 0 || VECTOR_SIZE(pathvec) > 1)
 			r = 0;
-		printf("%s %s a valid multipath device path\n",
-		       devpath, r == 0 ? "is" : "is not");
 		goto out;
 	}
 
@@ -676,8 +666,6 @@ main (int argc, char *argv[])
 		if (fd == -1) {
 			condlog(3, "%s: daemon is not running", dev);
 			if (!systemd_service_enabled(dev)) {
-				printf("%s is not a valid "
-				       "multipath device path\n", dev);
 				goto out;
 			}
 		} else
@@ -724,6 +712,15 @@ main (int argc, char *argv[])
 		condlog(3, "restart multipath configuration process");
 
 out:
+	if (cmd == CMD_VALID_PATH) {
+		const char fmt[] = "%s %s a valid multipath device path";
+		char buf[sizeof(fmt) - 4 + FILENAME_MAX + 6];
+		snprintf(buf, sizeof(buf), fmt, dev,
+			 r == 0 ? "is" : "is not");
+		printf("%s\n", buf);
+		condlog(2, "%s", buf);
+	}
+
 	dm_lib_release();
 	dm_lib_exit();
 
