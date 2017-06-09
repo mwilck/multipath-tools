@@ -160,7 +160,13 @@ void post_config_state(enum daemon_status state)
 		running_state = state;
 		pthread_cond_broadcast(&config_cond);
 #ifdef USE_SYSTEMD
-		sd_notify(0, sd_notify_status());
+		/*
+		 * DAEMON_RUNNING is only used in checkerloop
+		 * and causes lots of pointless status updates
+		 * for systemd. Suppress.
+		 */
+		if (state != DAEMON_RUNNING)
+			sd_notify(0, sd_notify_status());
 #endif
 	}
 	pthread_mutex_unlock(&config_lock);
