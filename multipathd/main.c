@@ -2035,6 +2035,7 @@ child (void * param)
 			post_config_state(DAEMON_IDLE);
 #ifdef USE_SYSTEMD
 			if (!startup_done) {
+				condlog(2, "initial configuraiton done, daemon is ready");
 				sd_notify(0, "READY=1");
 				startup_done = 1;
 			}
