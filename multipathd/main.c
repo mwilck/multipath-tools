@@ -157,6 +157,7 @@ void post_config_state(enum daemon_status state)
 {
 	pthread_mutex_lock(&config_lock);
 	if (state != running_state) {
+		enum daemon_status old_state = running_state;
 		running_state = state;
 		pthread_cond_broadcast(&config_cond);
 #ifdef USE_SYSTEMD
@@ -165,7 +166,7 @@ void post_config_state(enum daemon_status state)
 		 * and causes lots of pointless status updates
 		 * for systemd. Suppress.
 		 */
-		if (state != DAEMON_RUNNING)
+		if (state != DAEMON_RUNNING && old_state != DAEMON_RUNNING)
 			sd_notify(0, sd_notify_status());
 #endif
 	}
