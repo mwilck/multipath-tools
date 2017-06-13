@@ -1337,7 +1337,7 @@ cli_getprstatus (void * v, char ** reply, int * len, void * data)
 	memset(*reply,0,2);
 
 
-	sprintf(*reply,"%d",mpp->prflag);
+	snprintf(*reply, 2, "%d", !!mpp->prflag);
 	(*reply)[1]='\0';
 
 
