@@ -280,11 +280,11 @@ int setup_map(struct multipath *mpp, char *params, int params_size)
 	select_pgfailback(conf, mpp);
 	select_pgpolicy(conf, mpp);
 	select_selector(conf, mpp);
-	select_features(conf, mpp);
 	select_hwhandler(conf, mpp);
+	select_no_path_retry(conf, mpp);
+	select_features(conf, mpp);
 	select_rr_weight(conf, mpp);
 	select_minio(conf, mpp);
-	select_no_path_retry(conf, mpp);
 	select_mode(conf, mpp);
 	select_uid(conf, mpp);
 	select_gid(conf, mpp);
