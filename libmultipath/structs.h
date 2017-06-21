@@ -22,6 +22,7 @@
 #define SCSI_PRODUCT_SIZE	17
 #define SCSI_REV_SIZE		5
 #define SCSI_STATE_SIZE		19
+#define SCSI_DH_SIZE		9 /* must hold "detached" */
 
 #define NO_PATH_RETRY_UNDEF	0
 #define NO_PATH_RETRY_FAIL	-1
@@ -205,6 +206,7 @@ struct path {
 	char rev[SCSI_REV_SIZE];
 	char serial[SERIAL_SIZE];
 	char tgt_node_name[NODE_NAME_SIZE];
+	char dh_state[SCSI_DH_SIZE];
 	unsigned long long size;
 	unsigned int checkint;
 	unsigned int tick;
