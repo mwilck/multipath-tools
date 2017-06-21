@@ -275,15 +275,21 @@ int setup_map(struct multipath *mpp, char *params, int params_size)
 
 	/*
 	 * properties selectors
+	 *
+	 * Ordering matters for some properties:
+	 * - features after no_path_retry and retain_hwhandler
+	 * - hwhandler after retain_hwhandler
+	 * No guarantee that this list is complete, check code in
+	 * propsel.c if in doubt.
 	 */
 	conf = get_multipath_config();
 	select_pgfailback(conf, mpp);
 	select_pgpolicy(conf, mpp);
 	select_selector(conf, mpp);
-	select_hwhandler(conf, mpp);
 	select_no_path_retry(conf, mpp);
 	select_retain_hwhandler(conf, mpp);
 	select_features(conf, mpp);
+	select_hwhandler(conf, mpp);
 	select_rr_weight(conf, mpp);
 	select_minio(conf, mpp);
 	select_mode(conf, mpp);
@@ -706,6 +712,48 @@ fail:
 	return 1;
 }
 
+static void
+check_dh_state_changed(struct multipath *mp)
+{
+	struct config *conf;
+	struct path newp, *pp;
+	struct pathgroup *pg;
+	int i, j;
+
+	conf = get_multipath_config();
+
+	vector_foreach_slot (mp->pg, pg, j) {
+		vector_foreach_slot (pg->paths, pp, i) {
+			if (!pp->udev || !strlen(pp->dh_state) ||
+			    (conf->retain_hwhandler == RETAIN_HWHANDLER_ON &&
+			     strcmp(pp->dh_state, "detached")))
+				continue;
+
+			memset(&newp, 0, sizeof(newp));
+			memcpy(newp.dev, pp->dev, sizeof(newp.dev));
+			newp.udev = udev_device_ref(pp->udev);
+
+			if (pathinfo(&newp, conf, DI_SYSFS) == PATHINFO_OK) {
+				if (strncmp(newp.dh_state, pp->dh_state,
+					    SCSI_DH_SIZE)) {
+					condlog(3, "%s: dh_state changed from %s to %s",
+						pp->dev,
+						pp->dh_state,
+						newp.dh_state);
+					memcpy(pp->dh_state, newp.dh_state,
+					       SCSI_DH_SIZE);
+				}
+			} else
+				condlog(1, "%s: failed to update dh_state",
+					pp->dev);
+
+			udev_device_unref(newp.udev);
+		}
+	}
+
+	put_multipath_config(conf);
+}
+
 /*
  * Return value:
  */
@@ -828,6 +876,8 @@ int domap(struct multipath *mpp, char *params, int is_daemon)
 			}
 		}
 		dm_setgeometry(mpp);
+
+		check_dh_state_changed(mpp);
 		return DOMAP_OK;
 	}
 	return DOMAP_FAIL;

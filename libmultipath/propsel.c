@@ -345,7 +345,22 @@ out:
 int select_hwhandler(struct config *conf, struct multipath *mp)
 {
 	char *origin;
+	struct path *pp;
+	char handler[SCSI_DH_SIZE+2];
+	int i;
 
+	if (mp->retain_hwhandler != RETAIN_HWHANDLER_OFF) {
+		vector_foreach_slot(mp->paths, pp, i) {
+			if (strlen(pp->dh_state) &&
+			    strcmp(pp->dh_state, "detached")) {
+				snprintf(handler, sizeof(handler),
+					 "1 %s", pp->dh_state);
+				mp->hwhandler = handler;
+				origin = "(setting: retained by kernel driver)";
+				goto out;
+			}
+		}
+	}
 	mp_set_hwe(hwhandler);
 	mp_set_conf(hwhandler);
 	mp_set_default(hwhandler, DEFAULT_HWHANDLER);

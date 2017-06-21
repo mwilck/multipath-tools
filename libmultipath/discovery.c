@@ -1188,6 +1188,10 @@ scsi_sysfs_pathinfo (struct path * pp, vector hwtable)
 	condlog(3, "%s: tgt_node_name = %s",
 		pp->dev, pp->tgt_node_name);
 
+	if (sysfs_attr_get_value(parent, "dh_state",
+				 pp->dh_state, sizeof(pp->dh_state)) >= 0)
+		condlog(3, "%s: dh_state = %s", pp->dev, pp->dh_state);
+
 	return 0;
 }
 
