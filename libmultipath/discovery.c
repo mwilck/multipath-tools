@@ -1615,6 +1615,7 @@ get_udev_uid(struct path * pp, char *uid_attribute, struct udev_device *udev)
 			len = strlen(value);
 		}
 		strncpy(pp->wwid, value, len);
+		pp->wwid[WWID_SIZE - 1] = '\0';
 	} else {
 		condlog(3, "%s: no %s attribute", pp->dev,
 			uid_attribute);
