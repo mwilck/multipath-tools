@@ -1,0 +1,17 @@
+SUBSYSTEM!="block", GOTO="end_wipe_parts"
+KERNEL!="sd*|dasd*|rbd*", GOTO="end_wipe_parts"
+ACTION!="add|change", GOTO="end_wipe_parts"
+
+IMPORT{cmdline}="dm_wipe_parts"
+ENV{dm_wipe_parts}!="1", GOTO="end_wipe_parts"
+
+ENV{DM_MULTIPATH_DEVICE_PATH}=="1", GOTO="wipe_parts"
+# Add members of other dm targets here
+
+GOTO="end_wipe_parts"
+
+LABEL="wipe_parts"
+IMPORT{db}="DM_WIPED_PARTS"
+ENV{DM_WIPED_PARTS}!="1", ENV{DM_WIPED_PARTS}="1", RUN+="/usr/sbin/partx -d --nr 1-1024 $env{DEVNAME}"
+
+LABEL="end_wipe_parts"
