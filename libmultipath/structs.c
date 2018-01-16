@@ -388,7 +388,7 @@ find_mp_by_wwid (vector mpvec, char * wwid)
 }
 
 struct multipath *
-find_mp_by_alias (vector mpvec, char * alias)
+find_mp_by_alias (vector mpvec, const char * alias)
 {
 	int i;
 	int len;
@@ -439,7 +439,7 @@ find_path_by_dev (vector pathvec, const char * dev)
 }
 
 struct path *
-find_path_by_devt (vector pathvec, char * dev_t)
+find_path_by_devt (vector pathvec, const char * dev_t)
 {
 	int i;
 	struct path * pp;
