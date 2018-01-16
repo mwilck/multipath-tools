@@ -1121,7 +1121,7 @@ uev_trigger (struct uevent * uev, void * trigger_data)
 	 * Add events are ignored here as the tables
 	 * are not fully initialised then.
 	 */
-	if (!strncmp(uev->kernel, "dm-", 3)) {
+	if (!strncmp(uev->kernel, "dm-", 3) && uevent_is_mpath(uev)) {
 		if (!strncmp(uev->action, "change", 6)) {
 			r = uev_add_map(uev, vecs);
 
