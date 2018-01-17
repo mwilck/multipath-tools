@@ -15,6 +15,7 @@
 #include "wwids.h"
 #include "defaults.h"
 #include "config.h"
+#include "devmapper.h"
 
 /*
  * Copyright (c) 2010 Benjamin Marzinski, Redhat
@@ -271,7 +272,7 @@ out:
 }
 
 int
-should_multipath(struct path *pp1, vector pathvec)
+should_multipath(struct path *pp1, vector pathvec, vector mpvec)
 {
 	int i, ignore_new_devs;
 	struct path *pp2;
@@ -287,6 +288,15 @@ should_multipath(struct path *pp1, vector pathvec)
 
 	condlog(4, "checking if %s should be multipathed", pp1->dev);
 	if (!ignore_new_devs) {
+		char tmp_wwid[WWID_SIZE];
+		struct multipath *mp = find_mp_by_wwid(mpvec, pp1->wwid);
+
+		if (mp != NULL && dm_get_uuid(mp->alias, tmp_wwid) == 0 &&
+		    !strncmp(tmp_wwid, pp1->wwid, WWID_SIZE)) {
+			condlog(3, "wwid %s is already multipathed, keeping it",
+				pp1->wwid);
+			return 1;
+		}
 		vector_foreach_slot(pathvec, pp2, i) {
 			if (pp1->dev == pp2->dev)
 				continue;
