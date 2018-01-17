@@ -274,20 +274,20 @@ out:
 int
 should_multipath(struct path *pp1, vector pathvec, vector mpvec)
 {
-	int i, ignore_new_devs;
+	int i, ignore_new;
 	struct path *pp2;
 	struct config *conf;
 
 	conf = get_multipath_config();
-	ignore_new_devs = conf->ignore_new_devs;
-	if (!conf->find_multipaths && !ignore_new_devs) {
+	ignore_new = ignore_new_devs(conf);
+	if (!find_multipaths_on(conf) && !ignore_new) {
 		put_multipath_config(conf);
 		return 1;
 	}
 	put_multipath_config(conf);
 
 	condlog(4, "checking if %s should be multipathed", pp1->dev);
-	if (!ignore_new_devs) {
+	if (!ignore_new) {
 		char tmp_wwid[WWID_SIZE];
 		struct multipath *mp = find_mp_by_wwid(mpvec, pp1->wwid);
 
