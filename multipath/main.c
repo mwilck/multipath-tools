@@ -350,6 +350,17 @@ out:
 	return r;
 }
 
+static void print_cmd_valid(const char *devpath, int k)
+{
+	const char *msg[] = { "is", "is not" };
+
+	if (k < 0 || k >= sizeof(msg))
+		return;
+
+	printf("%s %s a valid multipath device path\n",
+	       devpath, msg[k]);
+}
+
 /*
  * Return value:
  *  -1: Retry
@@ -391,10 +402,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 	    cmd != CMD_REMOVE_WWID &&
 	    (filter_devnode(conf->blist_devnode,
 			    conf->elist_devnode, dev) > 0)) {
-		if (cmd == CMD_VALID_PATH)
-			printf("%s is not a valid multipath device path\n",
-			       devpath);
-		goto out;
+		goto print_valid;
 	}
 
 	/*
@@ -407,7 +415,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		if (!refwwid) {
 			condlog(4, "%s: failed to get wwid", devpath);
 			if (failed == 2 && cmd == CMD_VALID_PATH)
-				printf("%s is not a valid multipath device path\n", devpath);
+				goto print_valid;
 			else
 				condlog(3, "scope is null");
 			goto out;
@@ -450,9 +458,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 				r = 0;
 			if (r == 0 ||
 			    !find_multipaths_on(conf) || !ignore_wwids(conf)) {
-				printf("%s %s a valid multipath device path\n",
-				       devpath, r == 0 ? "is" : "is not");
-				goto out;
+				goto print_valid;
 			}
 		}
 	}
@@ -496,9 +502,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		 * the refwwid, then the path is valid */
 		if (VECTOR_SIZE(curmp) != 0 || VECTOR_SIZE(pathvec) > 1)
 			r = 0;
-		printf("%s %s a valid multipath device path\n",
-		       devpath, r == 0 ? "is" : "is not");
-		goto out;
+		goto print_valid;
 	}
 
 	if (cmd != CMD_CREATE && cmd != CMD_DRY_RUN) {
@@ -513,6 +517,10 @@ configure (struct config *conf, enum mpath_cmds cmd,
 	 */
 	r = coalesce_paths(&vecs, NULL, refwwid,
 			   conf->force_reload, refwwid != NULL, cmd);
+
+print_valid:
+	if (cmd == CMD_VALID_PATH)
+		print_cmd_valid(devpath, r);
 
 out:
 	if (refwwid)
