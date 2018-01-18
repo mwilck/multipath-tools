@@ -350,15 +350,14 @@ out:
 	return r;
 }
 
-static void print_cmd_valid(const char *devpath, int k)
+static void print_cmd_valid(int k)
 {
-	const char *msg[] = { "is", "is not" };
+	int vals[] = { 1, 0 };
 
-	if (k < 0 || k >= sizeof(msg))
+	if (k < 0 || k >= sizeof(vals))
 		return;
 
-	printf("%s %s a valid multipath device path\n",
-	       devpath, msg[k]);
+	printf("DM_MULTIPATH_DEVICE_PATH=\"%d\"\n", vals[k]);
 }
 
 /*
@@ -520,7 +519,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 
 print_valid:
 	if (cmd == CMD_VALID_PATH)
-		print_cmd_valid(devpath, r);
+		print_cmd_valid(r);
 
 out:
 	if (refwwid)
