@@ -350,14 +350,15 @@ out:
 	return r;
 }
 
-static void print_cmd_valid(int k)
+static int print_cmd_valid(int k)
 {
-	int vals[] = { 1, 0 };
+	int vals[] = { 1, 0, 2 };
 
 	if (k < 0 || k >= sizeof(vals))
-		return;
+		return 1;
 
 	printf("DM_MULTIPATH_DEVICE_PATH=\"%d\"\n", vals[k]);
+	return k == 1;
 }
 
 /*
@@ -501,6 +502,9 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		 * the refwwid, then the path is valid */
 		if (VECTOR_SIZE(curmp) != 0 || VECTOR_SIZE(pathvec) > 1)
 			r = 0;
+		else
+			/* Use r=2 as an indication for "maybe" */
+			r = 2;
 		goto print_valid;
 	}
 
@@ -519,7 +523,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 
 print_valid:
 	if (cmd == CMD_VALID_PATH)
-		print_cmd_valid(r);
+		r = print_cmd_valid(r);
 
 out:
 	if (refwwid)
