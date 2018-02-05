@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include "checkers.h"
 #include "vector.h"
@@ -331,3 +332,104 @@ remember_wwid(char *wwid)
 		condlog(4, "wwid %s already in wwids file", wwid);
 	return ret;
 }
+
+static const char shm_dir[] = "/dev/shm/multipath/failed_wwids";
+static const char shm_lock[] = ".lock";
+static const char shm_header[] = "multipath shm lock file, don't edit";
+static char _shm_lock_path[sizeof(shm_dir)+sizeof(shm_lock)];
+static const char *shm_lock_path = &_shm_lock_path[0];
+
+static int multipath_shm_open(bool rw)
+{
+	int fd;
+	int can_write;
+
+	if (shm_lock_path[0] == '\0')
+		snprintf(_shm_lock_path, sizeof(_shm_lock_path),
+			 "%s/%s", shm_dir, shm_lock);
+	fd = open_file(shm_lock_path, &can_write, shm_header);
+
+	if (fd == 0 && rw && !can_write) {
+		close(fd);
+		condlog(1, "failed to open %s for writing", shm_dir);
+		return -1;
+	}
+
+	return fd;
+}
+
+void multipath_shm_close(void *arg)
+{
+	long fd = (long)arg;
+
+	close(fd);
+	unlink(shm_lock_path);
+}
+
+static int _failed_wwid_op(const char *wwid, bool rw,
+			   int(*func)(const char*), const char *msg)
+{
+	char path[PATH_MAX];
+	long lockfd;
+	int r = -1;
+
+	if (snprintf(path, sizeof(path), "%s/%s", shm_dir, wwid)
+	    >= sizeof(path)) {
+		condlog(1, "%s: path name overflow", __func__);
+		return -1;
+	}
+
+	lockfd = multipath_shm_open(rw);
+	if (lockfd == -1)
+		return -1;
+
+	pthread_cleanup_push(multipath_shm_close, (void*)lockfd);
+	r = func(path);
+	pthread_cleanup_pop(1);
+
+	if (r == -1)
+		condlog(1, "%s: %s: %s", msg, wwid, strerror(errno));
+	else if (rw && r == 1) /* r == 0 means nothing changed */
+		condlog(3, "%s: %s", msg, wwid);
+	else if (!rw)
+		condlog(4, "%s: %s is %s", msg, wwid, r ? "failed" : "good");
+
+	return r;
+}
+
+static int _is_failed(const char *path)
+{
+	struct stat st;
+
+	if (lstat(path, &st) == 0)
+		return 1;
+	else if (errno == ENOENT)
+		return 0;
+	else
+		return -1;
+}
+
+static int _mark_failed(const char *path)
+{
+	/* Called from _failed_wwid_op: we know that shm_lock_path exists */
+	if (_is_failed(path) == 1)
+		return 0;
+	return (link(shm_lock_path, path) == 0 ? 1 : -1);
+}
+
+static int _unmark_failed(const char *path)
+{
+	if (_is_failed(path) == 0)
+		return 0;
+	return (unlink(path) == 0 ? 1 : -1);
+}
+
+#define declare_failed_wwid_op(op, rw) \
+int op ## _wwid(const char *wwid) \
+{ \
+	return _failed_wwid_op(wwid, (rw), _ ## op, #op); \
+}
+
+declare_failed_wwid_op(is_failed, false)
+declare_failed_wwid_op(mark_failed, true)
+declare_failed_wwid_op(unmark_failed, true)

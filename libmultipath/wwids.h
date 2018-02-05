@@ -17,5 +17,7 @@ int remember_wwid(char *wwid);
 int check_wwids_file(char *wwid, int write_wwid);
 int remove_wwid(char *wwid);
 int replace_wwids(vector mp);
-
+int is_failed_wwid(const char *wwid);
+int mark_failed_wwid(const char *wwid);
+int unmark_failed_wwid(const char *wwid);
 #endif /* _WWIDS_H */
