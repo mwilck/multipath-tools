@@ -933,7 +933,8 @@ rescan:
 		mpp->action = ACT_RELOAD;
 		extract_hwe_from_path(mpp);
 	} else {
-		if (!should_multipath(pp, vecs->pathvec, vecs->mpvec)) {
+		if (!should_multipath(pp, vecs->pathvec, vecs->mpvec,
+				      need_do_map == ADD_PATH_DOMAP_FORCE)) {
 			orphan_path(pp, "only one path");
 			return 0;
 		}
@@ -953,7 +954,7 @@ rescan:
 	/* persistent reservation check*/
 	mpath_pr_event_handle(pp);
 
-	if (!need_do_map)
+	if (need_do_map == ADD_PATH_DOMAP_NO)
 		return 0;
 
 	if (!dm_map_present(mpp->alias)) {
@@ -1863,7 +1864,7 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 			conf = get_multipath_config();
 			ret = pathinfo(pp, conf, DI_ALL | DI_BLACKLIST);
 			if (ret == PATHINFO_OK) {
-				ev_add_path(pp, vecs, 1);
+				ev_add_path(pp, vecs, ADD_PATH_DOMAP_YES);
 				pp->tick = 1;
 			} else if (ret == PATHINFO_SKIPPED) {
 				put_multipath_config(conf);
@@ -1989,7 +1990,7 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 		}
 		if (!disable_reinstate && reinstate_path(pp, add_active)) {
 			condlog(3, "%s: reload map", pp->dev);
-			ev_add_path(pp, vecs, 1);
+			ev_add_path(pp, vecs, ADD_PATH_DOMAP_YES);
 			pp->tick = 1;
 			return 0;
 		}
@@ -2012,7 +2013,7 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 			/* Clear IO errors */
 			if (reinstate_path(pp, 0)) {
 				condlog(3, "%s: reload map", pp->dev);
-				ev_add_path(pp, vecs, 1);
+				ev_add_path(pp, vecs, ADD_PATH_DOMAP_YES);
 				pp->tick = 1;
 				return 0;
 			}
@@ -2288,7 +2289,7 @@ configure (struct vectors * vecs)
 	 * superfluous ACT_RELOAD ioctls. Later calls are done
 	 * with FORCE_RELOAD_YES.
 	 */
-	ret = coalesce_paths(vecs, mpvec, NULL, force_reload, CMD_NONE);
+	ret = coalesce_paths(vecs, mpvec, NULL, force_reload, false, CMD_NONE);
 	if (force_reload == FORCE_RELOAD_WEAK)
 		force_reload = FORCE_RELOAD_YES;
 	if (ret) {

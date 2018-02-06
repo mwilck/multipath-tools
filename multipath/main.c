@@ -441,8 +441,12 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		 * Paths listed in the wwids file are always considered valid.
 		 */
 		if (cmd == CMD_VALID_PATH) {
-			if ((!find_multipaths_on(conf) && ignore_wwids(conf)) ||
-			    check_wwids_file(refwwid, 0) == 0)
+			if (is_failed_wwid(refwwid)) {
+				r = 1;
+				goto print_valid;
+			} else if ((!find_multipaths_on(conf) &&
+				  ignore_wwids(conf)) ||
+				 check_wwids_file(refwwid, 0) == 0)
 				r = 0;
 			if (r == 0 ||
 			    !find_multipaths_on(conf) || !ignore_wwids(conf)) {
@@ -504,9 +508,11 @@ configure (struct config *conf, enum mpath_cmds cmd,
 
 	/*
 	 * core logic entry point
+	 * If refwwid != NULL, user has given a device to multipath,
+	 * so retry even if this ID has failed before.
 	 */
 	r = coalesce_paths(&vecs, NULL, refwwid,
-			   conf->force_reload, cmd);
+			   conf->force_reload, refwwid != NULL, cmd);
 
 out:
 	if (refwwid)

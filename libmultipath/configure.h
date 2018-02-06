@@ -32,7 +32,8 @@ int setup_map (struct multipath * mpp, char * params, int params_size,
 	       struct vectors *vecs );
 int domap (struct multipath * mpp, char * params, int is_daemon);
 int reinstate_paths (struct multipath *mpp);
-int coalesce_paths (struct vectors *vecs, vector curmp, char * refwwid, int force_reload, enum mpath_cmds cmd);
+int coalesce_paths (struct vectors *vecs, vector curmp, char * refwwid,
+		    int force_reload, bool retry_failed, enum mpath_cmds cmd);
 int get_refwwid (enum mpath_cmds cmd, char * dev, enum devtypes dev_type,
 		 vector pathvec, char **wwid);
 int reload_map(struct vectors *vecs, struct multipath *mpp, int refresh, int is_daemon);

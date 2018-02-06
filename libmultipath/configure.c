@@ -981,7 +981,7 @@ out:
  * reloaded in DM if there's a difference. This is useful during startup.
  */
 int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
-		    int force_reload, enum mpath_cmds cmd)
+		    int force_reload, bool retry_failed, enum mpath_cmds cmd)
 {
 	int r = 1;
 	int k, i;
@@ -1032,7 +1032,8 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 			continue;
 
 		/* If find_multipaths was selected check if the path is valid */
-		if (!refwwid && !should_multipath(pp1, pathvec, curmp)) {
+		if (!refwwid && !should_multipath(pp1, pathvec, curmp,
+						  retry_failed)) {
 			orphan_path(pp1, "only one path");
 			continue;
 		}

@@ -750,7 +750,7 @@ cli_add_path (void * v, char ** reply, int * len, void * data)
 		pp->checkint = conf->checkint;
 	}
 	put_multipath_config(conf);
-	return ev_add_path(pp, vecs, 1);
+	return ev_add_path(pp, vecs, ADD_PATH_DOMAP_FORCE);
 blacklisted:
 	*reply = strdup("blacklisted\n");
 	*len = strlen(*reply) + 1;
@@ -813,7 +813,8 @@ cli_add_map (void * v, char ** reply, int * len, void * data)
 					 vecs->pathvec, &refwwid);
 			if (refwwid) {
 				if (coalesce_paths(vecs, NULL, refwwid,
-						   FORCE_RELOAD_NONE, CMD_NONE))
+						   FORCE_RELOAD_NONE, true,
+						   CMD_NONE))
 					condlog(2, "%s: coalesce_paths failed",
 									param);
 				dm_lib_release();

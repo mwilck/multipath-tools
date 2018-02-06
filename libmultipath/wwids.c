@@ -4,6 +4,7 @@
 #include <string.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -273,11 +274,15 @@ out:
 }
 
 int
-should_multipath(struct path *pp1, vector pathvec, vector mpvec)
+should_multipath(struct path *pp1, vector pathvec, vector mpvec,
+		 bool retry_failed)
 {
 	int i, ignore_new;
 	struct path *pp2;
 	struct config *conf;
+
+	if (!retry_failed && is_failed_wwid(pp1->wwid))
+		return 0;
 
 	conf = get_multipath_config();
 	ignore_new = ignore_new_devs(conf);

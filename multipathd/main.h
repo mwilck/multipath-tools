@@ -22,6 +22,14 @@ void exit_daemon(void);
 const char * daemon_status(void);
 int need_to_delay_reconfig (struct vectors *);
 int reconfigure (struct vectors *);
+/*
+ * 3rd argument of ev_add_path()
+ */
+enum {
+	ADD_PATH_DOMAP_NO = 0,	  /* don't call domap */
+	ADD_PATH_DOMAP_YES = 1,	  /* call domap, don't retry failed */
+	ADD_PATH_DOMAP_FORCE = 2, /* call domap, retry previously failed */
+};
 int ev_add_path (struct path *, struct vectors *, int);
 int ev_remove_path (struct path *, struct vectors *, int);
 int ev_add_map (char *, const char *, struct vectors *);
