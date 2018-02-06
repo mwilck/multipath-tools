@@ -22,6 +22,7 @@
 #include "devmapper.h"
 #include "sysfs.h"
 #include "config.h"
+#include "wwids.h"
 
 #include "log_pthread.h"
 #include <sys/types.h>
@@ -411,8 +412,11 @@ int dm_addmap_create (struct multipath *mpp, char * params)
 		int err;
 
 		if (dm_addmap(DM_DEVICE_CREATE, TGT_MPATH, mpp, params, ro,
-			      udev_flags))
+			      udev_flags)) {
+			if (unmark_failed_wwid(mpp->wwid) == 1)
+				mpp->needs_paths_uevent = 1;
 			return 1;
+		}
 		/*
 		 * DM_DEVICE_CREATE is actually DM_DEV_CREATE + DM_TABLE_LOAD.
 		 * Failing the second part leaves an empty map. Clean it up.
@@ -428,6 +432,8 @@ int dm_addmap_create (struct multipath *mpp, char * params)
 			break;
 		}
 	}
+	if (mark_failed_wwid(mpp->wwid) == 1)
+		mpp->needs_paths_uevent = 1;
 	return 0;
 }
 
