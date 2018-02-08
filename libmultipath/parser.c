@@ -186,6 +186,12 @@ snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
 	return fwd;
 }
 
+static const char quote_marker[] = { '\0', '"', '\0' };
+static bool is_quote(const char* token)
+{
+	return !memcmp(token, quote_marker, sizeof(quote_marker));
+}
+
 vector
 alloc_strvec(char *string)
 {
@@ -225,17 +231,13 @@ alloc_strvec(char *string)
 		start = cp;
 		if (!in_string && *cp == '"') {
 			cp++;
-			token = MALLOC(2);
+			token = MALLOC(sizeof(quote_marker));
 
 			if (!token)
 				goto out;
 
-			*(token) = '"';
-			*(token + 1) = '\0';
-			if (in_string)
-				in_string = 0;
-			else
-				in_string = 1;
+			memcpy(token, quote_marker, sizeof(quote_marker));
+			in_string = 1;
 		} else if (!in_string && (*cp == '{' || *cp == '}')) {
 			token = MALLOC(2);
 
@@ -324,13 +326,13 @@ set_value(vector strvec)
 			(char *)VECTOR_SLOT(strvec, 0));
 		return NULL;
 	}
-	size = strlen(str);
-	if (size == 0) {
-		condlog(0, "option '%s' has empty value",
-			(char *)VECTOR_SLOT(strvec, 0));
-		return NULL;
-	}
-	if (*str != '"') {
+	if (!is_quote(str)) {
+		size = strlen(str);
+		if (size == 0) {
+			condlog(0, "option '%s' has empty value",
+				(char *)VECTOR_SLOT(strvec, 0));
+			return NULL;
+		}
 		alloc = MALLOC(sizeof (char) * (size + 1));
 		if (alloc)
 			memcpy(alloc, str, size);
@@ -354,7 +356,7 @@ set_value(vector strvec)
 				(char *)VECTOR_SLOT(strvec, 0));
 			return NULL;
 		}
-		if (*str == '"')
+		if (is_quote(str))
 			break;
 		tmp = alloc;
 		/* The first +1 is for the NULL byte. The rest are for the
@@ -460,7 +462,7 @@ validate_config_strvec(vector strvec, char *file)
 			(char *)VECTOR_SLOT(strvec, 0), line_nr, file);
 		return -1;
 	}
-	if (*str != '"') {
+	if (!is_quote(str)) {
 		if (VECTOR_SIZE(strvec) > 2)
 			condlog(0, "ignoring extra data starting with '%s' on line %d of %s", (char *)VECTOR_SLOT(strvec, 2), line_nr, file);
 		return 0;
@@ -472,7 +474,7 @@ validate_config_strvec(vector strvec, char *file)
 				line_nr, file);
 			return -1;
 		}
-		if (*str == '"') {
+		if (is_quote(str)) {
 			if (VECTOR_SIZE(strvec) > i + 1)
 				condlog(0, "ignoring extra data starting with '%s' on line %d of %s", (char *)VECTOR_SLOT(strvec, (i + 1)), line_nr, file);
 			return 0;
