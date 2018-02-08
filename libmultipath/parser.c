@@ -223,7 +223,7 @@ alloc_strvec(char *string)
 			goto out;
 
 		start = cp;
-		if (*cp == '"') {
+		if (!in_string && *cp == '"') {
 			cp++;
 			token = MALLOC(2);
 
@@ -246,11 +246,25 @@ alloc_strvec(char *string)
 			*(token + 1) = '\0';
 			cp++;
 		} else {
+			int two_quotes = 0;
+
+		move_on:
 			while ((in_string ||
 				(!isspace((int) *cp) && isascii((int) *cp) &&
 				 *cp != '!' && *cp != '#' && *cp != '{' &&
 				 *cp != '}')) && *cp != '\0' && *cp != '"')
 				cp++;
+
+			/* Two consecutive double quotes - don't end string */
+			if (in_string && *cp == '"') {
+				if (*(cp + 1) == '"') {
+					two_quotes = 1;
+					cp += 2;
+					goto move_on;
+				} else
+					in_string = 0;
+			}
+
 			strlen = cp - start;
 			token = MALLOC(strlen + 1);
 
@@ -259,6 +273,16 @@ alloc_strvec(char *string)
 
 			memcpy(token, start, strlen);
 			*(token + strlen) = '\0';
+
+			/* Replace "" by " */
+			if (two_quotes) {
+				char *qq = strstr(token, "\"\"");
+				while (qq != NULL) {
+					memmove(qq + 1, qq + 2,
+						strlen + 1 - (qq + 2 - token));
+					qq = strstr(qq + 1, "\"\"");
+				}
+			}
 		}
 		vector_set_slot(strvec, token);
 
