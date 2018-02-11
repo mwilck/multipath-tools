@@ -60,6 +60,7 @@
 #include "uxsock.h"
 #include "mpath_cmd.h"
 #include "foreign.h"
+#include "propsel.h"
 
 int logsink;
 struct udev *udev;
@@ -350,7 +351,8 @@ out:
 	return r;
 }
 
-static int print_cmd_valid(int k)
+static int print_cmd_valid(int k, const vector pathvec,
+			   struct config *conf)
 {
 	int vals[] = { 1, 0, 2 };
 
@@ -358,6 +360,13 @@ static int print_cmd_valid(int k)
 		return 1;
 
 	printf("DM_MULTIPATH_DEVICE_PATH=\"%d\"\n", vals[k]);
+	if (vals[k] == 2 && VECTOR_SIZE(pathvec) > 0) {
+		struct path *pp = VECTOR_SLOT(pathvec, 0);
+
+		select_find_multipaths_timeout(conf, pp);
+		printf("FIND_MULTIPATHS_PATH_TMO=\"%d\"\n",
+		       pp->find_multipaths_timeout);
+	}
 	return k == 1;
 }
 
@@ -523,7 +532,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 
 print_valid:
 	if (cmd == CMD_VALID_PATH)
-		r = print_cmd_valid(r);
+		r = print_cmd_valid(r, pathvec, conf);
 
 out:
 	if (refwwid)
