@@ -41,6 +41,7 @@ static vector dm_pg_get_paths(const struct gen_pathgroup *gpg)
 const struct gen_multipath_ops dm_gen_multipath_ops = {
 	.get_pathgroups = dm_mp_get_pgs,
 	.snprint = snprint_multipath_attr,
+	.style = snprint_multipath_style,
 };
 
 const struct gen_pathgroup_ops dm_gen_pathgroup_ops = {

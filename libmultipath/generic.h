@@ -75,4 +75,10 @@ struct gen_path {
 	const struct gen_path_ops *ops;
 };
 
+/*
+ * Helper functions for setting up xxx_ops
+ */
+int generic_style(const struct gen_multipath*,
+		  char *buf, int len, int verbosity);
+
 #endif /* _GENERIC_H */

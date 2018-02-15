@@ -129,3 +129,5 @@ int snprint_pathgroup_attr(const struct gen_pathgroup* gpg,
 			   char *buf, int len, char wildcard);
 int snprint_multipath_attr(const struct gen_multipath* gm,
 			   char *buf, int len, char wildcard);
+int snprint_multipath_style(const struct gen_multipath *gmp,
+			    char *style, int len, int verbosity);

@@ -31,7 +31,8 @@
 #include "discovery.h"
 #include "dm-generic.h"
 
-#define MAX(x,y) (x > y) ? x : y
+#define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#define MIN(x,y) (((x) > (y)) ? (y) : (x))
 #define TAIL     (line + len - 1 - c)
 #define NOPAD    s = c
 #define PAD(x) \
@@ -1011,6 +1012,24 @@ void print_multipath_topology(struct multipath *mpp, int verbosity)
 	FREE(buff);
 }
 
+int
+snprint_multipath_style(const struct gen_multipath *gmp, char *style, int len,
+			int verbosity)
+{
+	int n;
+	const struct multipath *mpp = gen_multipath_to_dm(gmp);
+	bool need_action = (verbosity > 1 &&
+			    mpp->action != ACT_NOTHING &&
+			    mpp->action != ACT_UNDEF &&
+			    mpp->action != ACT_IMPOSSIBLE);
+	bool need_wwid = (strncmp(mpp->alias, mpp->wwid, WWID_SIZE));
+
+	n = snprintf(style, len, "%s%s%s%s",
+		     need_action ? "%A: " : "", "%n",
+		     need_wwid ? " (%w)" : "", " %d %s");
+	return MIN(n, len - 1);
+}
+
 int snprint_multipath_topology(char *buff, int len, const struct multipath *mpp,
 			       int verbosity)
 {
@@ -1033,17 +1052,10 @@ int snprint_multipath_topology(char *buff, int len, const struct multipath *mpp,
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 1); /* bold on */
 
-	if (verbosity > 1 &&
-	    mpp->action != ACT_NOTHING &&
-	    mpp->action != ACT_UNDEF && mpp->action != ACT_IMPOSSIBLE)
-			c += sprintf(c, "%%A: ");
-
-	c += sprintf(c, "%%n");
-
-	if (strncmp(mpp->alias, mpp->wwid, WWID_SIZE))
-		c += sprintf(c, " (%%w)");
-
-	c += sprintf(c, " %%d %%s");
+	c += snprint_multipath_style(dm_multipath_to_gen(mpp),
+				     c, sizeof(style) - (c - style),
+				     verbosity);
+	c += snprintf(c, sizeof(style) - (c - style), " %%d %%s");
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 0); /* bold off */
 
