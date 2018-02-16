@@ -122,3 +122,10 @@ int snprint_tgt_wwpn (char *, size_t, const struct path *);
 void print_multipath_topology (struct multipath * mpp, int verbosity);
 void print_all_paths (vector pathvec, int banner);
 void print_all_paths_custo (vector pathvec, int banner, char *fmt);
+
+int snprint_path_attr(const struct gen_path* gp,
+		      char *buf, int len, char wildcard);
+int snprint_pathgroup_attr(const struct gen_pathgroup* gpg,
+			   char *buf, int len, char wildcard);
+int snprint_multipath_attr(const struct gen_multipath* gm,
+			   char *buf, int len, char wildcard);
