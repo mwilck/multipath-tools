@@ -42,6 +42,31 @@ typedef struct _vector *vector;
 #define vector_foreach_slot_backwards(v,p,i) \
 	for (i = VECTOR_SIZE(v); i > 0 && ((p) = (v)->slot[i-1]); i--)
 
+/*
+ * Given a vector vec with elements of given type,
+ * return a newly allocated vector with elements conv(e) for each element
+ * e in vec. "conv" may be a macro or a function.
+ */
+#define vector_convert(vec, type, conv)					\
+	({								\
+		vector __v = (vec);					\
+		vector __t = vector_alloc();				\
+		type *__j;						\
+		int __i;						\
+									\
+		if (__t != NULL) {					\
+			vector_foreach_slot(__v, __j, __i) {		\
+				if (vector_alloc_slot(__t) == NULL) {	\
+					vector_free(__t);		\
+					__t = NULL;			\
+					break;				\
+				}					\
+				vector_set_slot(__t, conv(__j));	\
+			}						\
+		}							\
+		__t;							\
+	})
+
 /* Prototypes */
 extern vector vector_alloc(void);
 extern void *vector_alloc_slot(vector v);
