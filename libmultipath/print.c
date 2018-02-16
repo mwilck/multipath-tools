@@ -1030,10 +1030,12 @@ snprint_multipath_style(const struct gen_multipath *gmp, char *style, int len,
 	return MIN(n, len - 1);
 }
 
-int snprint_multipath_topology(char *buff, int len, const struct multipath *mpp,
-			       int verbosity)
+int _snprint_multipath_topology(char *buff, int len,
+				const struct gen_multipath *gmp,
+				int verbosity)
 {
 	int j, i, fwd = 0;
+	const struct multipath *mpp = gen_multipath_to_dm(gmp);
 	struct path * pp = NULL;
 	struct pathgroup * pgp = NULL;
 	char style[64];
@@ -1052,9 +1054,9 @@ int snprint_multipath_topology(char *buff, int len, const struct multipath *mpp,
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 1); /* bold on */
 
-	c += snprint_multipath_style(dm_multipath_to_gen(mpp),
-				     c, sizeof(style) - (c - style),
-				     verbosity);
+	c += gmp->ops->style(dm_multipath_to_gen(mpp),
+			     c, sizeof(style) - (c - style),
+			     verbosity);
 	c += snprintf(c, sizeof(style) - (c - style), " %%d %%s");
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 0); /* bold off */

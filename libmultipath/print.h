@@ -1,3 +1,6 @@
+#ifndef _PRINT_H
+#define _PRINT_H
+
 #define PRINT_PATH_LONG      "%w %i %d %D %p %t %T %s %o"
 #define PRINT_PATH_INDENT    "%i %d %D %t %T %o"
 #define PRINT_PATH_CHECKER   "%i %d %D %p %t %T %o %C"
@@ -97,8 +100,10 @@ int snprint_multipath_header (char *, int, const char *);
 int snprint_path (char *, int, const char *, const struct path *, int);
 int snprint_multipath (char *, int, const char *,
 		       const struct multipath *, int);
-int snprint_multipath_topology (char *, int, const struct multipath * mpp,
-				int verbosity);
+int _snprint_multipath_topology (char *, int, const struct gen_multipath *,
+				 int verbosity);
+#define snprint_multipath_topology(buf, len, mpp, v) \
+	_snprint_multipath_topology (buf, len, dm_multipath_to_gen(mpp), v)
 int snprint_multipath_topology_json (char * buff, int len,
 				const struct vectors * vecs);
 int snprint_multipath_map_json (char * buff, int len,
@@ -131,3 +136,4 @@ int snprint_multipath_attr(const struct gen_multipath* gm,
 			   char *buf, int len, char wildcard);
 int snprint_multipath_style(const struct gen_multipath *gmp,
 			    char *style, int len, int verbosity);
+#endif /* _PRINT_H */
