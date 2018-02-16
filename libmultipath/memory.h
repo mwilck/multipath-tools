@@ -55,6 +55,7 @@ extern void dbg_free_final(char *);
 
 #define MALLOC(n)    (calloc(1,(n)))
 #define FREE(p)      do { free(p); p = NULL; } while(0)
+#define FREE_CONST(p) do { free((void*)(unsigned long)p); p = NULL; } while(0)
 #define REALLOC(p,n) (realloc((p),(n)))
 #define STRDUP(n)    (strdup(n))
 
