@@ -97,9 +97,13 @@ void get_path_layout (vector pathvec, int header);
 void get_multipath_layout (vector mpvec, int header);
 int snprint_path_header (char *, int, const char *);
 int snprint_multipath_header (char *, int, const char *);
-int snprint_path (char *, int, const char *, const struct path *, int);
-int snprint_multipath (char *, int, const char *,
-		       const struct multipath *, int);
+int _snprint_path (char *, int, const char *, const struct gen_path *, int);
+#define snprint_path(buf, len, fmt, pp, v) \
+	_snprint_path(buf, len, fmt,  dm_path_to_gen(pp), v)
+int _snprint_multipath (char *, int, const char *,
+		       const struct gen_multipath *, int);
+#define snprint_multipath(buf, len, fmt, mp, v) \
+	_snprint_multipath(buf, len, fmt,  dm_multipath_to_gen(mp), v)
 int _snprint_multipath_topology (char *, int, const struct gen_multipath *,
 				 int verbosity);
 #define snprint_multipath_topology(buf, len, mpp, v) \
@@ -124,7 +128,10 @@ int snprint_host_wwpn (char *, size_t, const struct path *);
 int snprint_tgt_wwnn (char *, size_t, const struct path *);
 int snprint_tgt_wwpn (char *, size_t, const struct path *);
 
-void print_multipath_topology (struct multipath * mpp, int verbosity);
+void _print_multipath_topology (struct gen_multipath * gmp, int verbosity);
+#define print_multipath_topology(mpp, v) \
+	_print_multipath_topology(dm_multipath_to_gen(mpp), v)
+
 void print_all_paths (vector pathvec, int banner);
 void print_all_paths_custo (vector pathvec, int banner, char *fmt);
 

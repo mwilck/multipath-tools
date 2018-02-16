@@ -847,8 +847,8 @@ snprint_multipath_header (char * line, int len, const char * format)
 }
 
 int
-snprint_multipath (char * line, int len, const char * format,
-	     const struct multipath * mpp, int pad)
+_snprint_multipath (char * line, int len, const char * format,
+		    const struct gen_multipath * gmp, int pad)
 {
 	char * c = line;   /* line cursor */
 	char * s = line;   /* for padding */
@@ -871,7 +871,7 @@ snprint_multipath (char * line, int len, const char * format,
 		if (!(data = mpd_lookup(*f)))
 			continue;
 
-		data->snprint(buff, MAX_FIELD_LEN, mpp);
+		gmp->ops->snprint(gmp, buff, MAX_FIELD_LEN, *f);
 		PRINT(c, TAIL, "%s", buff);
 		if (pad)
 			PAD(data->width);
@@ -914,8 +914,8 @@ snprint_path_header (char * line, int len, const char * format)
 }
 
 int
-snprint_path (char * line, int len, const char * format,
-	     const struct path * pp, int pad)
+_snprint_path (char * line, int len, const char * format,
+	       const struct gen_path * gp, int pad)
 {
 	char * c = line;   /* line cursor */
 	char * s = line;   /* for padding */
@@ -938,7 +938,7 @@ snprint_path (char * line, int len, const char * format,
 		if (!(data = pd_lookup(*f)))
 			continue;
 
-		data->snprint(buff, MAX_FIELD_LEN, pp);
+		gp->ops->snprint(gp, buff, MAX_FIELD_LEN, *f);
 		PRINT(c, TAIL, "%s", buff);
 		if (pad)
 			PAD(data->width);
@@ -949,8 +949,8 @@ snprint_path (char * line, int len, const char * format,
 }
 
 int
-snprint_pathgroup (char * line, int len, char * format,
-		   const struct pathgroup * pgp)
+_snprint_pathgroup (char * line, int len, char * format,
+		    const struct gen_pathgroup * ggp)
 {
 	char * c = line;   /* line cursor */
 	char * s = line;   /* for padding */
@@ -973,7 +973,7 @@ snprint_pathgroup (char * line, int len, char * format,
 		if (!(data = pgd_lookup(*f)))
 			continue;
 
-		data->snprint(buff, MAX_FIELD_LEN, pgp);
+		ggp->ops->snprint(ggp, buff, MAX_FIELD_LEN, *f);
 		PRINT(c, TAIL, "%s", buff);
 		PAD(data->width);
 	} while (*f++);
@@ -981,8 +981,10 @@ snprint_pathgroup (char * line, int len, char * format,
 	__endline(line, len, c);
 	return (c - line);
 }
+#define snprint_pathgroup(line, len, fmt, pgp) \
+	_snprint_pathgroup(line, len, fmt, dm_pathgroup_to_gen(pgp))
 
-void print_multipath_topology(struct multipath *mpp, int verbosity)
+void _print_multipath_topology(struct gen_multipath *gmp, int verbosity)
 {
 	int resize;
 	char *buff = NULL;
@@ -999,7 +1001,7 @@ void print_multipath_topology(struct multipath *mpp, int verbosity)
 			return;
 		}
 
-		len = snprint_multipath_topology(buff, maxlen, mpp, verbosity);
+		len = _snprint_multipath_topology(buff, maxlen, gmp, verbosity);
 		resize = (len == maxlen - 1);
 
 		if (resize) {
