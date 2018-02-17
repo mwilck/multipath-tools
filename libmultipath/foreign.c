@@ -17,6 +17,7 @@
   USA.
 */
 
+#include <sys/sysmacros.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -24,6 +25,7 @@
 #include <limits.h>
 #include <glob.h>
 #include <dlfcn.h>
+#include <libudev.h>
 #include "vector.h"
 #include "debug.h"
 #include "util.h"
@@ -154,6 +156,8 @@ int init_foreign(const char *multipath_dir)
 		get_dlsym(fgn, add, dl_err);
 		get_dlsym(fgn, change, dl_err);
 		get_dlsym(fgn, remove, dl_err);
+		get_dlsym(fgn, remove_all, dl_err);
+		get_dlsym(fgn, check, dl_err);
 		get_dlsym(fgn, get_multipaths, dl_err);
 		get_dlsym(fgn, get_paths, dl_err);
 
@@ -182,6 +186,108 @@ int init_foreign(const char *multipath_dir)
 err:
 	cleanup_foreign();
 	return ret;
+}
+
+int add_foreign(struct udev_device *udev)
+{
+	struct foreign *fgn;
+	dev_t dt = udev_device_get_devnum(udev);
+	int j;
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		int r = fgn->add(fgn->context, udev);
+
+		if (r == FOREIGN_CLAIMED) {
+			condlog(2, "%s: foreign \"%s\" claims device %d:%d",
+				__func__, fgn->name, major(dt), minor(dt));
+			return r;
+		} else if (r == FOREIGN_OK) {
+			condlog(4, "%s: foreign \"%s\" owns device %d:%d",
+				__func__, fgn->name, major(dt), minor(dt));
+			return r;
+		} else if (r != FOREIGN_IGNORED) {
+			condlog(1, "%s: unexpected return value %d from \"%s\"",
+				__func__, r, fgn->name);
+		}
+	}
+	return FOREIGN_IGNORED;
+}
+
+int change_foreign(struct udev_device *udev)
+{
+	struct foreign *fgn;
+	int j;
+	dev_t dt = udev_device_get_devnum(udev);
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		int r = fgn->change(fgn->context, udev);
+
+		if (r == FOREIGN_CLAIMED) {
+			condlog(2, "%s: foreign \"%s\" claims device %d:%d",
+				__func__, fgn->name, major(dt), minor(dt));
+			return r;
+		} else if (r == FOREIGN_UNCLAIMED) {
+			condlog(2, "%s: foreign \"%s\" released device %d:%d",
+				__func__, fgn->name, major(dt), minor(dt));
+			return r;
+		} else if (r == FOREIGN_OK) {
+			condlog(4, "%s: foreign \"%s\" completed %d:%d",
+				__func__, fgn->name, major(dt), minor(dt));
+			return r;
+		} else if (r != FOREIGN_IGNORED) {
+			condlog(1, "%s: unexpected return value %d from \"%s\"",
+				__func__, r, fgn->name);
+		}
+	}
+	return FOREIGN_IGNORED;
+}
+
+int remove_foreign(struct udev_device *udev)
+{
+	struct foreign *fgn;
+	int j;
+	dev_t dt = udev_device_get_devnum(udev);
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		int r = fgn->remove(fgn->context, udev);
+
+		if (r == FOREIGN_OK) {
+			condlog(2, "%s: foreign \"%s\" removed device %d:%d",
+				__func__, fgn->name, major(dt), minor(dt));
+			return r;
+		} else if (r != FOREIGN_IGNORED) {
+			condlog(1, "%s: unexpected return value %d from \"%s\"",
+				__func__, r, fgn->name);
+		}
+	}
+	return FOREIGN_IGNORED;
+}
+
+int remove_all_foreign(void)
+{
+	struct foreign *fgn;
+	int j;
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		int r;
+
+		r = fgn->remove_all(fgn->context);
+		if (r != FOREIGN_IGNORED && r != FOREIGN_OK) {
+			condlog(1, "%s: unexpected return value %d from \"%s\"",
+				__func__, r, fgn->name);
+		}
+	}
+	return FOREIGN_OK;
+}
+
+void check_foreign(void)
+{
+	struct foreign *fgn;
+	int j;
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		fgn->check(fgn->context);
+	}
 }
 
 vector get_foreign_multipaths(void)
