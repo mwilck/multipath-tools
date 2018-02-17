@@ -1,0 +1,185 @@
+/*
+  Copyright (c) 2018 Martin Wilck, SUSE Linux GmbH
+
+  This program is free software; you can redistribute it and/or
+  modify it under the terms of the GNU General Public License
+  as published by the Free Software Foundation; either version 2
+  of the License, or (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+  USA.
+*/
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <limits.h>
+#include <glob.h>
+#include <dlfcn.h>
+#include "vector.h"
+#include "debug.h"
+#include "util.h"
+#include "foreign.h"
+
+static vector foreigns;
+
+#define get_dlsym(foreign, sym, lbl)					\
+	do {								\
+		foreign->sym =	dlsym(foreign->handle, #sym);		\
+		if (foreign->sym == NULL) {				\
+			condlog(0, "%s: symbol \"%s\" not found in \"%s\"", \
+				__func__, #sym, foreign->name);		\
+			goto lbl;					\
+		}							\
+	} while(0)
+
+static void free_foreign(struct foreign **fgn)
+{
+	if (fgn == NULL || *fgn == NULL)
+		return;
+	condlog(4, "%s: freeing \"%s\"", __func__, (*fgn)->name);
+	if ((*fgn)->context != NULL)
+		(*fgn)->cleanup((*fgn)->context);
+	if ((*fgn)->handle != NULL)
+		dlclose((*fgn)->handle);
+	free(*fgn);
+}
+
+void cleanup_foreign(void)
+{
+	struct foreign *fgn;
+	int i;
+
+	vector_foreach_slot(foreigns, fgn, i)
+		free_foreign(&fgn);
+	vector_free(foreigns);
+	foreigns = NULL;
+}
+
+int init_foreign(const char *multipath_dir)
+{
+	char pathbuf[PATH_MAX];
+	static const char base[] = "libforeign-";
+	static const char suffix[] = ".so";
+	glob_t globbuf;
+	int ret = -EINVAL, r, i;
+
+	if (foreigns != NULL) {
+		condlog(0, "%s: already initialized", __func__);
+		return -EEXIST;
+	}
+	foreigns = vector_alloc();
+
+	if (snprintf(pathbuf, sizeof(pathbuf), "%s/%s*%s",
+		     multipath_dir, base, suffix) >= sizeof(pathbuf)) {
+		condlog(1, "%s: path length overflow", __func__);
+		goto err;
+	}
+
+	condlog(4, "%s: looking for %s\n", __func__, pathbuf);
+	memset(&globbuf, 0, sizeof(globbuf));
+	r = glob(pathbuf, 0, NULL, &globbuf);
+
+	if (r == GLOB_NOMATCH) {
+		condlog(2, "%s: no foreign multipath libraries found",
+			__func__);
+		globfree(&globbuf);
+		return 0;
+	} else if (r != 0) {
+		char *msg;
+
+		if (errno != 0) {
+			ret = -errno;
+			msg = strerror(errno);
+		} else {
+			ret = -1;
+			msg = (r == GLOB_ABORTED ? "read error" :
+			       "out of memory");
+		}
+		condlog(0, "%s: search for foreign libraries failed: %d (%s)",
+			__func__, r, msg);
+		globfree(&globbuf);
+		goto err;
+	}
+
+	for (i = 0; i < globbuf.gl_pathc; i++) {
+		char *msg, *fn;
+		struct foreign *fgn;
+		int len, namesz;
+
+		fn = strrchr(globbuf.gl_pathv[i], '/');
+		if (fn == NULL)
+			fn = globbuf.gl_pathv[i];
+		else
+			fn++;
+
+		len = strlen(fn);
+		if (len <= sizeof(base) + sizeof(suffix) - 2) {
+			condlog(0, "%s: internal error: filename too short: %s",
+				__func__, globbuf.gl_pathv[i]);
+			continue;
+		}
+
+		condlog(4, "%s: found %s", __func__, fn);
+
+		namesz = len + 3 - sizeof(base) - sizeof(suffix);
+		fgn = malloc(sizeof(*fgn) + namesz);
+		if (fgn == NULL)
+			continue;
+		memset(fgn, 0, sizeof(*fgn));
+
+		strlcpy((char*)fgn + sizeof(*fgn), fn + sizeof(base) - 1,
+			namesz);
+		fgn->name = (const char*)fgn + sizeof(*fgn);
+
+		fgn->handle = dlopen(globbuf.gl_pathv[i], RTLD_NOW|RTLD_LOCAL);
+		msg = dlerror();
+		if (fgn->handle == NULL) {
+			condlog(1, "%s: failed to open %s: %s", __func__,
+				fn, msg);
+			free_foreign(&fgn);
+			continue;
+		}
+
+		get_dlsym(fgn, init, dl_err);
+		get_dlsym(fgn, cleanup, dl_err);
+		get_dlsym(fgn, add, dl_err);
+		get_dlsym(fgn, change, dl_err);
+		get_dlsym(fgn, remove, dl_err);
+		get_dlsym(fgn, get_multipaths, dl_err);
+		get_dlsym(fgn, get_paths, dl_err);
+
+		fgn->context = fgn->init(LIBMP_FOREIGN_API);
+		if (fgn->context == NULL) {
+			condlog(0, "%s: init() failed for %s", __func__, fn);
+			free_foreign(&fgn);
+			continue;
+		}
+
+		if (vector_alloc_slot(foreigns) == NULL) {
+			free_foreign(&fgn);
+			continue;
+		}
+		vector_set_slot(foreigns, fgn);
+		condlog(2, "foreign library \"%s\" loaded successfully", fgn->name);
+
+		continue;
+
+	dl_err:
+		free_foreign(&fgn);
+	}
+	globfree(&globbuf);
+
+	return 0;
+err:
+	cleanup_foreign();
+	return ret;
+}
