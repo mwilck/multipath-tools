@@ -191,9 +191,14 @@ err:
 int add_foreign(struct udev_device *udev)
 {
 	struct foreign *fgn;
-	dev_t dt = udev_device_get_devnum(udev);
+	dev_t dt;
 	int j;
 
+	if (udev == NULL) {
+		condlog(1, "%s called with NULL udev", __func__);
+		return FOREIGN_ERR;
+	}
+	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
 		int r = fgn->add(fgn->context, udev);
 
@@ -217,8 +222,13 @@ int change_foreign(struct udev_device *udev)
 {
 	struct foreign *fgn;
 	int j;
-	dev_t dt = udev_device_get_devnum(udev);
+	dev_t dt;
 
+	if (udev == NULL) {
+		condlog(1, "%s called with NULL udev", __func__);
+		return FOREIGN_ERR;
+	}
+	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
 		int r = fgn->change(fgn->context, udev);
 
@@ -246,8 +256,13 @@ int remove_foreign(struct udev_device *udev)
 {
 	struct foreign *fgn;
 	int j;
-	dev_t dt = udev_device_get_devnum(udev);
+	dev_t dt;
 
+	if (udev == NULL) {
+		condlog(1, "%s called with NULL udev", __func__);
+		return FOREIGN_ERR;
+	}
+	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
 		int r = fgn->remove(fgn->context, udev);
 
