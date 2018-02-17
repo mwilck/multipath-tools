@@ -84,6 +84,7 @@ static int use_watchdog;
 #include "waiter.h"
 #include "io_err_stat.h"
 #include "wwids.h"
+#include "foreign.h"
 #include "../third-party/valgrind/drd.h"
 
 #define FILE_NAME_SIZE 256
@@ -2373,6 +2374,9 @@ child (void * param)
 		condlog(0, "failed to initialize prioritizers");
 		goto failed;
 	}
+	/* Failing this is non-fatal */
+
+	init_foreign(conf->multipath_dir);
 
 	setlogmask(LOG_UPTO(conf->verbosity + 3));
 
@@ -2530,6 +2534,7 @@ child (void * param)
 	FREE(vecs);
 	vecs = NULL;
 
+	cleanup_foreign();
 	cleanup_checkers();
 	cleanup_prio();
 
