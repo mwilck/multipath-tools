@@ -809,6 +809,8 @@ uev_remove_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 	int ret;
 
 	condlog(2, "%s: remove path (uevent)", uev->kernel);
+	remove_foreign(uev->udev);
+
 	pthread_cleanup_push(cleanup_lock, &vecs->lock);
 	lock(&vecs->lock);
 	pthread_testcancel();
@@ -933,6 +935,32 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
 	struct config *conf;
 	int disable_changed_wwids;
 	int needs_reinit = 0;
+
+	switch (change_foreign(uev->udev)) {
+	case FOREIGN_OK:
+		/* known foreign path, ignore event */
+		return 0;
+	case FOREIGN_UNCLAIMED:
+		condlog(0, "%s: un-claiming currently unsupported", __func__);
+		/*
+		 * TBD: un-orphan the path, check for another foreign
+		 * library or ourselves to claim it, and finally call
+		 * remove_foreign().
+		 * For now, pretend that the path is still handled by
+		 * this foreign library (it hasn't released it yet).
+		 */
+		return 0;
+	case FOREIGN_CLAIMED:
+		condlog(0, "%s: claiming on change currently unsupported",
+			__func__);
+		/*
+		 * TBD: try to free the path from the current holder, and
+		 * call add_foreign() if successful.
+		 */
+		break;
+	default:
+		break;
+	}
 
 	conf = get_multipath_config();
 	disable_changed_wwids = conf->disable_changed_wwids;
