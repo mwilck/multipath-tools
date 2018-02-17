@@ -59,6 +59,7 @@
 #include "wwids.h"
 #include "uxsock.h"
 #include "mpath_cmd.h"
+#include "foreign.h"
 
 int logsink;
 struct udev *udev;
@@ -758,6 +759,8 @@ main (int argc, char *argv[])
 		condlog(0, "failed to initialize prioritizers");
 		goto out;
 	}
+	/* Failing here is non-fatal */
+	init_foreign(conf->multipath_dir);
 	if (cmd == CMD_USABLE_PATHS) {
 		r = check_usable_paths(conf, dev, dev_type);
 		goto out;
@@ -828,8 +831,10 @@ out:
 	dm_lib_release();
 	dm_lib_exit();
 
+	cleanup_foreign();
 	cleanup_prio();
 	cleanup_checkers();
+
 
 	if (dev_type == DEV_UEVENT)
 		closelog();
