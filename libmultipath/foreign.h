@@ -80,8 +80,9 @@ struct foreign {
 	 * claimed. Unlike "add()", this should not change internal state
 	 * immediately, because multipathd may need to try to release the device
 	 * and may fail doing so. If it succeeds, it will call add() afterwards.
-	 * FOREIGN_UNCLAIMED: previously claimed device is now ignored, and
-	 * internally released.
+	 * FOREIGN_UNCLAIMED: previously claimed device is now ignored. The
+	 * internal state is not updated yet, multipathd will call remove()
+	 * after handling this return value successfully.
 	 * FOREIGN_ERR: error processing device (will be treated like
 	 * FOREIGN_IGNORED).
 	 */
