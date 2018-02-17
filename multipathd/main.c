@@ -1133,8 +1133,13 @@ uev_trigger (struct uevent * uev, void * trigger_data)
 	 * are not fully initialised then.
 	 */
 	if (!strncmp(uev->kernel, "dm-", 3)) {
-		if (!uevent_is_mpath(uev))
+		if (!uevent_is_mpath(uev)) {
+			if (!strncmp(uev->action, "change", 6))
+				(void)add_foreign(uev->udev);
+			else if (!strncmp(uev->action, "remove", 6))
+				(void)remove_foreign(uev->udev);
 			goto out;
+		}
 		if (!strncmp(uev->action, "change", 6)) {
 			r = uev_add_map(uev, vecs);
 
