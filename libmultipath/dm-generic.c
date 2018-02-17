@@ -28,13 +28,13 @@
 
 static vector dm_mp_get_pgs(const struct gen_multipath *gmp)
 {
-	return vector_convert(gen_multipath_to_dm(gmp)->pg,
+	return vector_convert(NULL, gen_multipath_to_dm(gmp)->pg,
 			      struct pathgroup, dm_pathgroup_to_gen);
 }
 
 static vector dm_pg_get_paths(const struct gen_pathgroup *gpg)
 {
-	return vector_convert(gen_pathgroup_to_dm(gpg)->paths,
+	return vector_convert(NULL, gen_pathgroup_to_dm(gpg)->paths,
 			      struct path, dm_path_to_gen);
 }
 
