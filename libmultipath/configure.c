@@ -41,6 +41,7 @@
 #include "uxsock.h"
 #include "wwids.h"
 #include "sysfs.h"
+#include "foreign.h"
 
 /* group paths in pg by host adapter
  */
@@ -939,6 +940,16 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 	}
 	vector_foreach_slot (pathvec, pp1, k) {
 		/* skip this path for some reason */
+
+		/* 0. if path is claimed by foreign library */
+		switch (add_foreign(pp1->udev)) {
+		case FOREIGN_CLAIMED:
+		case FOREIGN_OK:
+			orphan_path(pp1, "claimed by foreign library");
+			continue;
+		default:
+			break;
+		}
 
 		/* 1. if path has no unique id or wwid blacklisted */
 		conf = get_multipath_config();
