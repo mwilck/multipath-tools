@@ -93,12 +93,25 @@ struct foreign {
 	 * This is called on udev REMOVE events.
 	 *
 	 * Return values:
-	 * FOREIGN_OK: processed correctly
+	 * FOREIGN_OK: processed correctly (device removed)
 	 * FOREIGN_IGNORED: device wasn't registered internally
 	 * FOREIGN_ERR: error occured (will be treated like
 	 * FOREIGN_IGNORED).
 	 */
 	int (*remove)(struct context *, struct udev_device *);
+
+	/*
+	 * method: remove_all
+	 *
+	 * This is called if multipathd reconfigures itself.
+	 * Remove all registered devices.
+	 *
+	 * Return values:
+	 * FOREIGN_OK: processed correctly
+	 * FOREIGN_IGNORED: foreign had nothing to remove
+	 * FOREIGN_ERR: error occured
+	 */
+	int (*remove_all)(struct context*);
 
 	/*
 	 * method: check
@@ -137,6 +150,7 @@ void cleanup_foreign(void);
 int add_foreign(struct udev_device *);
 int change_foreign(struct udev_device *);
 int remove_foreign(struct udev_device *);
+int remove_all_foreign(void);
 void check_foreign(void);
 vector get_foreign_multipaths(void);
 vector get_foreign_paths(void);
