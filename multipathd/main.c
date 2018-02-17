@@ -700,6 +700,16 @@ rescan:
 		mpp->action = ACT_RELOAD;
 		extract_hwe_from_path(mpp);
 	} else {
+		/* 0. if path is claimed by foreign library */
+		switch (add_foreign(pp->udev)) {
+		case FOREIGN_CLAIMED:
+		case FOREIGN_OK:
+			orphan_path(pp, "claimed by foreign library");
+			return 0;
+		default:
+			break;
+		}
+
 		if (!should_multipath(pp, vecs->pathvec)) {
 			orphan_path(pp, "only one path");
 			return 0;
@@ -2123,6 +2133,7 @@ reconfigure (struct vectors * vecs)
 
 	free_pathvec(vecs->pathvec, FREE_PATHS);
 	vecs->pathvec = NULL;
+	remove_all_foreign();
 
 	/* Re-read any timezone changes */
 	tzset();
