@@ -183,3 +183,37 @@ err:
 	cleanup_foreign();
 	return ret;
 }
+
+vector get_foreign_multipaths(void)
+{
+	vector all = NULL;
+	struct foreign *fgn;
+	int j;
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		vector v = fgn->get_multipaths(fgn->context);
+
+		if (v == NULL)
+			continue;
+		vector_convert(all, v, struct gen_multipath, identity);
+		vector_free(v);
+	}
+	return all;
+}
+
+vector get_foreign_paths(void)
+{
+	vector all = NULL;
+	struct foreign *fgn;
+	int j;
+
+	vector_foreach_slot(foreigns, fgn, j) {
+		vector v = fgn->get_paths(fgn->context);
+
+		if (v == NULL)
+			continue;
+		vector_convert(all, v, struct gen_multipath, identity);
+		vector_free(v);
+	}
+	return all;
+}
