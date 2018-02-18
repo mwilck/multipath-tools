@@ -42,8 +42,10 @@ struct foreign {
 	 * Initialize foreign library, and check API compatibility
 	 * return pointer to opaque internal data strucure if successful,
 	 * NULL otherwise.
+	 *
+	 * arg "name" denotes the name by which the library is known.
 	 */
-	struct context* (*init)(unsigned int api);
+	struct context* (*init)(unsigned int api, const char *name);
 
 	/*
 	 * method: cleanup

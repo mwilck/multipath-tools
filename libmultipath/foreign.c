@@ -164,7 +164,7 @@ int init_foreign(const char *multipath_dir)
 		get_dlsym(fgn, get_multipaths, dl_err);
 		get_dlsym(fgn, get_paths, dl_err);
 
-		fgn->context = fgn->init(LIBMP_FOREIGN_API);
+		fgn->context = fgn->init(LIBMP_FOREIGN_API, fgn->name);
 		if (fgn->context == NULL) {
 			condlog(0, "%s: init() failed for %s", __func__, fn);
 			free_foreign(&fgn);
