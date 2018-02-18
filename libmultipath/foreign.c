@@ -30,6 +30,9 @@
 #include "debug.h"
 #include "util.h"
 #include "foreign.h"
+#include "structs.h"
+#include "structs_vec.h"
+#include "print.h"
 
 static vector foreigns;
 
@@ -337,4 +340,26 @@ const struct _vector *get_foreign_paths(void)
 		vector_free_const(v);
 	}
 	return all;
+}
+
+/* Call this after get_path_layout */
+void foreign_path_layout(void)
+{
+	const struct _vector *foreign_paths = get_foreign_paths();
+
+	if (foreign_paths) {
+		_get_path_layout(foreign_paths, LAYOUT_RESET_NOT);
+		vector_free_const(foreign_paths);
+	}
+}
+
+/* Call this after get_multipath_layout */
+void foreign_multipath_layout(void)
+{
+	const struct _vector *foreign_mps = get_foreign_multipaths();
+
+	if (foreign_mps) {
+		_get_multipath_layout(foreign_mps, LAYOUT_RESET_NOT);
+		vector_free_const(foreign_mps);
+	}
 }

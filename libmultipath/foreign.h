@@ -155,5 +155,7 @@ int remove_all_foreign(void);
 void check_foreign(void);
 const struct _vector *get_foreign_multipaths(void);
 const struct _vector *get_foreign_paths(void);
+void foreign_path_layout(void);
+void foreign_multipath_layout(void);
 
 #endif /*  _FOREIGN_H */
