@@ -26,7 +26,7 @@
 #include "lock.h"
 #include "debug.h"
 
-const char THIS[] = "nvme";
+const char *THIS;
 
 struct context {
 	pthread_mutex_t mutex;
@@ -51,7 +51,7 @@ void cleanup(struct context *ctx)
 	free(ctx);
 }
 
-struct context *init(unsigned int api)
+struct context *init(unsigned int api, const char *name)
 {
 	struct context *ctx;
 
@@ -70,6 +70,7 @@ struct context *init(unsigned int api)
 	if (ctx->mpvec == NULL)
 		goto err;
 
+	THIS = name;
 	return ctx;
 err:
 	cleanup(ctx);
