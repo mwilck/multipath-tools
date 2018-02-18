@@ -131,7 +131,7 @@ struct foreign {
 	 * belonging to this library, or NULL if there are none or an error
 	 * occurs.
 	 */
-	vector (*get_multipaths)(const struct context *);
+	const struct _vector* (*get_multipaths)(const struct context *);
 
 	/*
 	 * method: get_paths
@@ -140,7 +140,7 @@ struct foreign {
 	 * belonging to this library, or NULL if there are none or an error
 	 * occurs.
 	 */
-	vector (*get_paths)(const struct context *);
+	const struct _vector* (*get_paths)(const struct context *);
 	const char *name;
 	void *handle;
 	struct context *context;
@@ -153,7 +153,7 @@ int change_foreign(struct udev_device *);
 int remove_foreign(struct udev_device *);
 int remove_all_foreign(void);
 void check_foreign(void);
-vector get_foreign_multipaths(void);
-vector get_foreign_paths(void);
+const struct _vector *get_foreign_multipaths(void);
+const struct _vector *get_foreign_paths(void);
 
 #endif /*  _FOREIGN_H */
