@@ -136,7 +136,8 @@ int snprint_host_wwpn (char *, size_t, const struct path *);
 int snprint_tgt_wwnn (char *, size_t, const struct path *);
 int snprint_tgt_wwpn (char *, size_t, const struct path *);
 
-void _print_multipath_topology (struct gen_multipath * gmp, int verbosity);
+void _print_multipath_topology (const struct gen_multipath * gmp,
+				int verbosity);
 #define print_multipath_topology(mpp, v) \
 	_print_multipath_topology(dm_multipath_to_gen(mpp), v)
 

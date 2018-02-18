@@ -1025,7 +1025,7 @@ _snprint_pathgroup (char * line, int len, char * format,
 #define snprint_pathgroup(line, len, fmt, pgp) \
 	_snprint_pathgroup(line, len, fmt, dm_pathgroup_to_gen(pgp))
 
-void _print_multipath_topology(struct gen_multipath *gmp, int verbosity)
+void _print_multipath_topology(const struct gen_multipath *gmp, int verbosity)
 {
 	int resize;
 	char *buff = NULL;
