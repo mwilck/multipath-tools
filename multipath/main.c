@@ -258,6 +258,20 @@ get_dm_mpvec (enum mpath_cmds cmd, vector curmp, vector pathvec, char * refwwid)
 		if (cmd == CMD_CREATE)
 			reinstate_paths(mpp);
 	}
+
+	if (cmd == CMD_LIST_SHORT || cmd == CMD_LIST_LONG) {
+		const struct _vector *foreign_mps = get_foreign_multipaths();
+		const struct gen_multipath *gm;
+		struct config *conf = get_multipath_config();
+		int i;
+
+		vector_foreach_slot(foreign_mps, gm, i)
+			_print_multipath_topology(gm, conf->verbosity);
+
+		put_multipath_config(conf);
+		vector_free_const(foreign_mps);
+	}
+
 	return 0;
 }
 
@@ -460,6 +474,7 @@ configure (struct config *conf, enum mpath_cmds cmd,
 		print_all_paths(pathvec, 1);
 
 	get_path_layout(pathvec, 0);
+	foreign_path_layout();
 
 	if (get_dm_mpvec(cmd, curmp, pathvec, refwwid))
 		goto out;
