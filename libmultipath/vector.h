@@ -51,7 +51,7 @@ typedef struct _vector *vector;
  */
 #define vector_convert(new, vec, type, conv)				\
 	({								\
-		vector __v = (vec);					\
+		const struct _vector *__v = (vec);			\
 		vector __t = (new);					\
 		type *__j;						\
 		int __i;						\
