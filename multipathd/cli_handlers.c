@@ -39,12 +39,9 @@ show_paths (char ** r, int * len, struct vectors * vecs, char * style,
 	char * reply;
 	unsigned int maxlen = INITIAL_REPLY_LEN;
 	int again = 1;
-	const struct _vector *foreign_paths;
 
-	foreign_paths = get_foreign_paths();
 	get_path_layout(vecs->pathvec, 1);
-	if (foreign_paths != NULL)
-		_get_path_layout(foreign_paths, LAYOUT_RESET_NOT);
+	foreign_path_layout();
 
 	reply = MALLOC(maxlen);
 
@@ -61,20 +58,14 @@ show_paths (char ** r, int * len, struct vectors * vecs, char * style,
 		vector_foreach_slot(vecs->pathvec, pp, i)
 			c += snprint_path(c, reply + maxlen - c,
 					  style, pp, pretty);
-		if (foreign_paths != NULL) {
-			const struct gen_path *gp;
 
-			vector_foreach_slot(foreign_paths, gp, i)
-				c += _snprint_path(c, reply + maxlen - c,
-						   style, gp, pretty);
-		}
+		c += snprint_foreign_paths(c, reply + maxlen - c,
+					   style, pretty);
 
 		again = ((c - reply) == (maxlen - 1));
 
 		REALLOC_REPLY(reply, again, maxlen);
 	}
-	if (foreign_paths != NULL)
-		vector_free_const(foreign_paths);
 
 	*r = reply;
 	*len = (int)(c - reply + 1);
@@ -148,12 +139,9 @@ show_maps_topology (char ** r, int * len, struct vectors * vecs)
 	char * reply;
 	unsigned int maxlen = INITIAL_REPLY_LEN;
 	int again = 1;
-	const struct _vector *foreign_mps;
 
 	get_path_layout(vecs->pathvec, 0);
 	foreign_path_layout();
-
-	foreign_mps = get_foreign_multipaths();
 
 	reply = MALLOC(maxlen);
 
@@ -171,22 +159,12 @@ show_maps_topology (char ** r, int * len, struct vectors * vecs)
 			c += snprint_multipath_topology(c, reply + maxlen - c,
 							mpp, 2);
 		}
+		c += snprint_foreign_topology(c, reply + maxlen - c, 2);
 
-		if (foreign_mps != NULL) {
-			const struct gen_multipath *gm;
-
-			vector_foreach_slot(foreign_mps, gm, i) {
-				c += _snprint_multipath_topology(c, reply +
-								 maxlen - c,
-								 gm, 2);
-			}
-		}
 		again = ((c - reply) == (maxlen - 1));
 
 		REALLOC_REPLY(reply, again, maxlen);
 	}
-	if (foreign_mps != NULL)
-		vector_free_const(foreign_mps);
 
 	*r = reply;
 	*len = (int)(c - reply + 1);
@@ -536,12 +514,9 @@ show_maps (char ** r, int *len, struct vectors * vecs, char * style,
 	char * reply;
 	unsigned int maxlen = INITIAL_REPLY_LEN;
 	int again = 1;
-	const struct _vector *foreign_maps;
 
-	foreign_maps = get_foreign_multipaths();
 	get_multipath_layout(vecs->mpvec, 1);
-	if (foreign_maps)
-		_get_multipath_layout(foreign_maps, LAYOUT_RESET_NOT);
+	foreign_multipath_layout();
 
 	reply = MALLOC(maxlen);
 
@@ -562,23 +537,13 @@ show_maps (char ** r, int *len, struct vectors * vecs, char * style,
 			c += snprint_multipath(c, reply + maxlen - c,
 					       style, mpp, pretty);
 
-			if (foreign_maps !=NULL) {
-				const struct gen_multipath *gm;
-
-				vector_foreach_slot(foreign_maps, gm, i)
-					c += _snprint_multipath(c, reply +
-								maxlen - c,
-								style, gm,
-								pretty);
-			}
 		}
-
+		c += snprint_foreign_multipaths(c, reply + maxlen - c,
+					       style, pretty);
 		again = ((c - reply) == (maxlen - 1));
 
 		REALLOC_REPLY(reply, again, maxlen);
 	}
-	if (foreign_maps != NULL)
-		vector_free_const(foreign_maps);
 
 	*r = reply;
 	*len = (int)(c - reply + 1);

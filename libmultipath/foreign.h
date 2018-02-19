@@ -141,8 +141,13 @@ struct foreign {
 	 * return a vector of "struct gen_path*" with the path devices
 	 * belonging to this library, or NULL if there are none or an error
 	 * occurs.
+	void (*release_multipaths)(const struct context *ctx,
+				   const struct _vector* mpvec);
 	 */
 	const struct _vector* (*get_paths)(const struct context *);
+	void (*release_paths)(const struct context *ctx,
+			      const struct _vector* ppvec);
+
 	const char *name;
 	void *handle;
 	struct context *context;
@@ -155,9 +160,61 @@ int change_foreign(struct udev_device *);
 int delete_foreign(struct udev_device *);
 int delete_all_foreign(void);
 void check_foreign(void);
-const struct _vector *get_foreign_multipaths(void);
-const struct _vector *get_foreign_paths(void);
+
+/**
+ * foreign_path_layout()
+ * call this before printing paths, after get_path_layout(), to determine
+ * output field width.
+ */
 void foreign_path_layout(void);
+
+/**
+ * foreign_multipath_layout()
+ * call this before printing maps, after get_multipath_layout(), to determine
+ * output field width.
+ */
 void foreign_multipath_layout(void);
 
+/**
+ * snprint_foreign_topology(buf, len, verbosity);
+ * prints topology information from foreign libraries into buffer,
+ * '\0' - terminated.
+ * @param buf: output buffer
+ * @param len: size of output buffer
+ * @param verbosity: verbosity level
+ * @returns: number of printed characters excluding trailing '\0'.
+ */
+int snprint_foreign_topology(char *buf, int len, int verbosity);
+
+/**
+ * snprint_foreign_paths(buf, len, style, pad);
+ * prints formatted path information from foreign libraries into buffer,
+ * '\0' - terminated.
+ * @param buf: output buffer
+ * @param len: size of output buffer
+ * @param style: format string
+ * @param pad: whether to pad field width
+ * @returns: number of printed characters excluding trailing '\0'.
+ */
+int snprint_foreign_paths(char *buf, int len, const char *style, int pad);
+
+/**
+ * snprint_foreign_multipaths(buf, len, style, pad);
+ * prints formatted map information from foreign libraries into buffer,
+ * '\0' - terminated.
+ * @param buf: output buffer
+ * @param len: size of output buffer
+ * @param style: format string
+ * @param pad: whether to pad field width
+ * @returns: number of printed characters excluding trailing '\0'.
+ */
+int snprint_foreign_multipaths(char *buf, int len,
+			       const char *style, int pretty);
+
+/**
+ * print_foreign_topology(v)
+ * print foreign topology to stdout
+ * @param verbosity: verbosity level
+ */
+void print_foreign_topology(int verbosity);
 #endif /*  _FOREIGN_H */
