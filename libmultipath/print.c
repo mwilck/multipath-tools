@@ -1091,9 +1091,8 @@ int _snprint_multipath_topology(const struct gen_multipath *gmp,
 				char *buff, int len, int verbosity)
 {
 	int j, i, fwd = 0;
-	const struct multipath *mpp = gen_multipath_to_dm(gmp);
-	struct path * pp = NULL;
-	struct pathgroup * pgp = NULL;
+	const struct _vector *pgvec;
+	const struct gen_pathgroup *gpg;
 	char style[64];
 	char * c = style;
 	char fmt[64];
@@ -1110,48 +1109,66 @@ int _snprint_multipath_topology(const struct gen_multipath *gmp,
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 1); /* bold on */
 
-	c += gmp->ops->style(dm_multipath_to_gen(mpp),
-			     c, sizeof(style) - (c - style),
+	c += gmp->ops->style(gmp, c, sizeof(style) - (c - style),
 			     verbosity);
 	c += snprintf(c, sizeof(style) - (c - style), " %%d %%s");
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 0); /* bold off */
 
-	fwd += snprint_multipath(buff + fwd, len - fwd, style, mpp, 1);
+	fwd += _snprint_multipath(gmp, buff + fwd, len - fwd, style, 1);
 	if (fwd >= len)
 		return len;
-	fwd += snprint_multipath(buff + fwd, len - fwd, PRINT_MAP_PROPS, mpp,
-				 1);
+	fwd += _snprint_multipath(gmp, buff + fwd, len - fwd,
+				  PRINT_MAP_PROPS, 1);
 	if (fwd >= len)
 		return len;
 
-	if (!mpp->pg)
+	pgvec = gmp->ops->get_pathgroups(gmp);
+	if (pgvec == NULL)
 		return fwd;
 
-	vector_foreach_slot (mpp->pg, pgp, j) {
+	vector_foreach_slot (pgvec, gpg, j) {
+		const struct _vector *pathvec;
+		struct gen_path *gp;
+
 		f=fmt;
-		if (j + 1 < VECTOR_SIZE(mpp->pg)) {
+
+		if (j + 1 < VECTOR_SIZE(pgvec)) {
 			strcpy(f, "|-+- " PRINT_PG_INDENT);
 		} else
 			strcpy(f, "`-+- " PRINT_PG_INDENT);
-		fwd += snprint_pathgroup(buff + fwd, len - fwd, fmt, pgp);
-		if (fwd >= len)
-			return len;
+		fwd += _snprint_pathgroup(gpg, buff + fwd, len - fwd, fmt);
 
-		vector_foreach_slot (pgp->paths, pp, i) {
+		if (fwd >= len) {
+			fwd = len;
+			break;
+		}
+
+		pathvec = gpg->ops->get_paths(gpg);
+		if (pathvec == NULL)
+			continue;
+
+		vector_foreach_slot (pathvec, gp, i) {
 			f=fmt;
 			if (*f != '|')
 				*f=' ';
 			f++;
-			if (i + 1 < VECTOR_SIZE(pgp->paths))
+			if (i + 1 < VECTOR_SIZE(pathvec))
 				strcpy(f, " |- " PRINT_PATH_INDENT);
 			else
 				strcpy(f, " `- " PRINT_PATH_INDENT);
-			fwd += snprint_path(buff + fwd, len - fwd, fmt, pp, 1);
-			if (fwd >= len)
-				return len;
+			fwd += _snprint_path(gp, buff + fwd, len - fwd, fmt, 1);
+			if (fwd >= len) {
+				fwd = len;
+				break;
+			}
 		}
+		gpg->ops->rel_paths(gpg, pathvec);
+
+		if (fwd == len)
+			break;
 	}
+	gmp->ops->rel_pathgroups(gmp, pgvec);
 	return fwd;
 }
 
