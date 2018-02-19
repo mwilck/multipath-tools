@@ -902,8 +902,8 @@ snprint_multipath_header (char * line, int len, const char * format)
 }
 
 int
-_snprint_multipath (char * line, int len, const char * format,
-		    const struct gen_multipath * gmp, int pad)
+_snprint_multipath (const struct gen_multipath * gmp,
+		    char * line, int len, const char * format, int pad)
 {
 	char * c = line;   /* line cursor */
 	char * s = line;   /* for padding */
@@ -969,8 +969,8 @@ snprint_path_header (char * line, int len, const char * format)
 }
 
 int
-_snprint_path (char * line, int len, const char * format,
-	       const struct gen_path * gp, int pad)
+_snprint_path (const struct gen_path * gp, char * line, int len,
+	       const char * format, int pad)
 {
 	char * c = line;   /* line cursor */
 	char * s = line;   /* for padding */
@@ -1004,8 +1004,8 @@ _snprint_path (char * line, int len, const char * format,
 }
 
 int
-_snprint_pathgroup (char * line, int len, char * format,
-		    const struct gen_pathgroup * ggp)
+_snprint_pathgroup (const struct gen_pathgroup * ggp, char * line, int len,
+		    char * format)
 {
 	char * c = line;   /* line cursor */
 	char * s = line;   /* for padding */
@@ -1037,7 +1037,7 @@ _snprint_pathgroup (char * line, int len, char * format,
 	return (c - line);
 }
 #define snprint_pathgroup(line, len, fmt, pgp) \
-	_snprint_pathgroup(line, len, fmt, dm_pathgroup_to_gen(pgp))
+	_snprint_pathgroup(dm_pathgroup_to_gen(pgp), line, len, fmt)
 
 void _print_multipath_topology(const struct gen_multipath *gmp, int verbosity)
 {
@@ -1056,7 +1056,7 @@ void _print_multipath_topology(const struct gen_multipath *gmp, int verbosity)
 			return;
 		}
 
-		len = _snprint_multipath_topology(buff, maxlen, gmp, verbosity);
+		len = _snprint_multipath_topology(gmp, buff, maxlen, verbosity);
 		resize = (len == maxlen - 1);
 
 		if (resize) {
@@ -1087,9 +1087,8 @@ snprint_multipath_style(const struct gen_multipath *gmp, char *style, int len,
 	return MIN(n, len - 1);
 }
 
-int _snprint_multipath_topology(char *buff, int len,
-				const struct gen_multipath *gmp,
-				int verbosity)
+int _snprint_multipath_topology(const struct gen_multipath *gmp,
+				char *buff, int len, int verbosity)
 {
 	int j, i, fwd = 0;
 	const struct multipath *mpp = gen_multipath_to_dm(gmp);
@@ -1106,7 +1105,7 @@ int _snprint_multipath_topology(char *buff, int len,
 	reset_multipath_layout();
 
 	if (verbosity == 1)
-		return snprint_multipath(buff, len, "%n", mpp, 1);
+		return _snprint_multipath(gmp, buff, len, "%n", 1);
 
 	if(isatty(1))
 		c += sprintf(c, "%c[%dm", 0x1B, 1); /* bold on */
