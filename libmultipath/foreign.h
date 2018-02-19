@@ -36,116 +36,155 @@ enum foreign_retcode {
 	__LAST_FOREIGN_RETCODE,
 };
 
+/**
+ * Foreign multipath library API
+ * Foreign libraries must implement the following methods.
+ */
 struct foreign {
-	/*
-	 * method: init
-	 *
+	/**
+	 * method: init(api, name)
 	 * Initialize foreign library, and check API compatibility
 	 * return pointer to opaque internal data strucure if successful,
 	 * NULL otherwise.
 	 *
-	 * arg "name" denotes the name by which the library is known.
+	 * @param[in] api: API version
+	 * @param[in] name: name to use for references to self in log messages,
+	 *     doesn't need to be strdup'd
+	 * @returns context pointer to use in future method calls.
 	 */
 	struct context* (*init)(unsigned int api, const char *name);
 
-	/*
-	 * method: cleanup
-	 *
+	/**
+	 * method: cleanup(context)
 	 * Free data structures used by foreign library, including
 	 * context itself.
+	 *
+	 * @param[in] context foreign library context. This shouldn't be
+	 * referenced any more after calling cleanup().
 	 */
 	void (*cleanup)(struct context *);
 
-	/*
-	 * method: add
-	 *
+	/**
+	 * method: add(context, udev)
 	 * This is called during path detection, and for udev ADD events.
 	 *
-	 * Return values:
-	 * FOREIGN_CLAIMED: device newly claimed
-	 * FOREIGN_OK: already registered
-	 * FOREIGN_IGNORED: not registered, still wants to ignore
-	 * FOREIGN_ERR: error processing device (will be treated like
-	 * FOREIGN_IGNORED)
+	 * @param[in] context foreign library context
+	 * @param[in] udev udev device to add
+	 * @returns status code
+	 * @retval FOREIGN_CLAIMED: device newly claimed
+	 * @retval FOREIGN_OK: device already registered, no action taken
+	 * @retval FOREIGN_IGNORED: device is ignored, no action taken
+	 * @retval FOREIGN_ERR: an error occured (e.g. out-of-memory)
 	 */
 	int (*add)(struct context *, struct udev_device *);
 
-	/*
+	/**
 	 * method: change
-	 *
 	 * This is called on udev CHANGE events.
 	 *
-	 * Return values:
+	 * @param[in] context foreign library context
+	 * @param[in] udev udev device that has generated the event
+	 * @returns status code
+	 * @retval FOREIGN_OK: event processed
+	 * @retval FOREIGN_IGNORED: the device is ignored
+	 * @retval FOREIGN_ERR: an error occured (e.g. out-of-memory)
 	 *
-	 * FOREIGN_OK: event processed
-	 * FOREIGN_IGNORED: the device is ignored
-	 * FOREIGN_CLAIMED: previously not registered or claimed device is now
-	 * claimed. Unlike "add()", this should not change internal state
-	 * immediately, because multipathd may need to try to release the device
-	 * and may fail doing so. If it succeeds, it will call add() afterwards.
-	 * FOREIGN_UNCLAIMED: previously claimed device is now ignored. The
-	 * internal state is not updated yet, multipathd will call delete()
-	 * after handling this return value successfully.
-	 * FOREIGN_ERR: error processing device (will be treated like
-	 * FOREIGN_IGNORED).
+	 * Note: theoretically it can happen that the status of a foreign device
+	 * (claimed vs. not claimed) changes in a change event.
+	 * Supporting this correctly would require big efforts. For now, we
+	 * don't support it. "multipathd reconfigure" starts foreign device
+	 * detection from scratch and should be able to handle this situation.
 	 */
 	int (*change)(struct context *, struct udev_device *);
 
-	/*
+	/**
 	 * method: delete
-	 *
 	 * This is called on udev DELETE events.
 	 *
-	 * Return values:
-	 * FOREIGN_OK: processed correctly (device deleted)
-	 * FOREIGN_IGNORED: device wasn't registered internally
-	 * FOREIGN_ERR: error occured (will be treated like
-	 * FOREIGN_IGNORED).
+	 * @param[in] context foreign library context
+	 * @param[in] udev udev device that has generated the event and
+	 *	should be deleted
+	 * @returns status code
+	 * @retval FOREIGN_OK: processed correctly (device deleted)
+	 * @retval FOREIGN_IGNORED: device wasn't registered internally
+	 * @retval FOREIGN_ERR: error occured.
 	 */
 	int (*delete)(struct context *, struct udev_device *);
 
-	/*
+	/**
 	 * method: delete_all
-	 *
 	 * This is called if multipathd reconfigures itself.
-	 * Delete all registered devices.
+	 * Deletes all registered devices (maps and paths)
 	 *
-	 * Return values:
-	 * FOREIGN_OK: processed correctly
-	 * FOREIGN_IGNORED: foreign had nothing to delete
-	 * FOREIGN_ERR: error occured
+	 * @param[in] context foreign library context
+	 * @returns status code
+	 * @retval FOREIGN_OK: processed correctly
+	 * @retval FOREIGN_IGNORED: nothing to delete
+	 * @retval FOREIGN_ERR: error occured
 	 */
 	int (*delete_all)(struct context*);
 
-	/*
+	/**
 	 * method: check
-	 *
 	 * This is called from multipathd's checker loop.
 	 *
 	 * Check status of managed devices, update internal status, and print
 	 * log messages if appropriate.
+	 * @param[in] context foreign library context
 	 */
 	void (*check)(struct context *);
 
-	/*
-	 * method: get_multipaths
+	/**
+	 * lock internal data stuctures.
+	 * @param[in] ctx: foreign context
+	 */
+	void (*lock)(struct context *ctx);
+
+	/**
+	 * unlock internal data stuctures.
+	 * @param[in] ctx: foreign context (void* in order to use the function
+	 *	as argument to pthread_cleanup_push())
+	 */
+	void (*unlock)(void *ctx);
+
+	/**
+	 * method: get_multipaths(context)
+	 * Returned vector must be freed by calling release_multipaths().
+	 * Lock must be held until release_multipaths() is called.
 	 *
-	 * return a vector of "struct gen_multipath*" with the map devices
-	 * belonging to this library, or NULL if there are none or an error
-	 * occurs.
+	 * @param[in] context foreign library context
+	 * @returns a vector of "struct gen_multipath*" with the map devices
+	 * belonging to this library (see generic.h).
 	 */
 	const struct _vector* (*get_multipaths)(const struct context *);
 
-	/*
-	 * method: get_paths
+	/**
+	 * method: release_multipaths(context, mpvec)
+	 * release data structures obtained with get_multipaths (if any)
 	 *
-	 * return a vector of "struct gen_path*" with the path devices
-	 * belonging to this library, or NULL if there are none or an error
-	 * occurs.
+	 * @param[in] ctx the foreign context
+	 * @param[in] mpvec the vector allocated with get_multipaths()
+	 */
 	void (*release_multipaths)(const struct context *ctx,
 				   const struct _vector* mpvec);
+
+	/**
+	 * method: get_paths
+	 * Returned vector must be freed by calling release_paths().
+	 * Lock must be held until release_paths() is called.
+	 *
+	 * @param[in] context foreign library context
+	 * @returns a vector of "struct gen_path*" with the path devices
+	 * belonging to this library (see generic.h)
 	 */
 	const struct _vector* (*get_paths)(const struct context *);
+
+	/**
+	 * release data structures obtained with get_multipaths (if any)
+	 *
+	 * @param[in] ctx the foreign context
+	 * @param[in] ppvec the vector allocated with get_paths()
+	 */
 	void (*release_paths)(const struct context *ctx,
 			      const struct _vector* ppvec);
 
@@ -154,12 +193,60 @@ struct foreign {
 	struct context *context;
 };
 
+/**
+ * init_foreign(dir)
+ * load and initialize foreign multipath libraries in dir (libforeign-*.so).
+ * @param dir: directory to search
+ * @returns: 0 on success, negative value on failure.
+ */
 int init_foreign(const char *multipath_dir);
+
+/**
+ * cleanup_foreign(dir)
+ * cleanup and free all data structures owned by foreign libraries
+ */
 void cleanup_foreign(void);
+
+/**
+ * add_foreign(udev)
+ * check if a device belongs to any foreign library.
+ * calls add() for all known foreign libs, in the order registered,
+ * until the first one returns FOREIGN_CLAIMED or FOREIGN_OK.
+ * @param udev: udev device to check
+ * @returns: status code
+ * @retval FOREIGN_CLAIMED: newly claimed by a foreign lib
+ * @retval FOREIGN_OK: already claimed by a foreign lib
+ * @retval FOREIGN_IGNORED: ignored by all foreign libs
+ * @retval FOREIGN_ERR: an error occured
+ */
 int add_foreign(struct udev_device *);
+
+/**
+ * change_foreign(udev)
+ * Notify foreign libraries of an udev CHANGE event
+ * @param udev: udev device to check
+ * @returns: status code (see change() method above).
+ */
 int change_foreign(struct udev_device *);
+
+/**
+ * delete_foreign(udev)
+ * @param udev: udev device being removed
+ * @returns: status code (see remove() above)
+ */
 int delete_foreign(struct udev_device *);
+
+/**
+ * delete_all_foreign()
+ * call delete_all() for all foreign libraries
+ * @returns: status code (see delete_all() above)
+ */
 int delete_all_foreign(void);
+
+/**
+ * check_foreign()
+ * call check() (see above) for all foreign libraries
+ */
 void check_foreign(void);
 
 /**
