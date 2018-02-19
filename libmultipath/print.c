@@ -345,7 +345,7 @@ snprint_multipath_rev (char * buff, size_t len, const struct multipath * mpp)
 static int
 snprint_multipath_foreign (char * buff, size_t len, const struct multipath * pp)
 {
-	return 0;
+	return snprintf(buff, len, "%s", "--");
 }
 
 static int
@@ -630,7 +630,7 @@ snprint_path_checker (char * buff, size_t len, const struct path * pp)
 static int
 snprint_path_foreign (char * buff, size_t len, const struct path * pp)
 {
-	return 0;
+	return snprintf(buff, len, "%s", "--");
 }
 
 struct multipath_data mpd[] = {
@@ -656,7 +656,7 @@ struct multipath_data mpd[] = {
 	{'v', "vend",          0, snprint_multipath_vend},
 	{'p', "prod",          0, snprint_multipath_prod},
 	{'e', "rev",           0, snprint_multipath_rev},
-	{'R', "foreign",       0, snprint_multipath_foreign},
+	{'G', "foreign",       0, snprint_multipath_foreign},
 	{0, NULL, 0 , NULL}
 };
 
@@ -680,7 +680,7 @@ struct path_data pd[] = {
 	{'R', "host WWPN",     0, snprint_host_wwpn},
 	{'r', "target WWPN",   0, snprint_tgt_wwpn},
 	{'a', "host adapter",  0, snprint_host_adapter},
-	{'R', "foreign",       0, snprint_path_foreign},
+	{'G', "foreign",       0, snprint_path_foreign},
 	{0, NULL, 0 , NULL}
 };
 
