@@ -18,6 +18,7 @@
 */
 #ifndef _FOREIGN_H
 #define _FOREIGN_H
+#include <stdbool.h>
 #include <libudev.h>
 
 #define LIBMP_FOREIGN_API ((1 << 8) | 0)
@@ -217,4 +218,18 @@ int snprint_foreign_multipaths(char *buf, int len,
  * @param verbosity: verbosity level
  */
 void print_foreign_topology(int verbosity);
+
+/**
+ * is_claimed_by_foreign(ud)
+ * @param udev: udev device
+ * @returns: true iff device is (newly or already) claimed by a foreign lib
+ */
+static inline bool
+is_claimed_by_foreign(struct udev_device *ud)
+{
+	int rc = add_foreign(ud);
+
+	return (rc == FOREIGN_CLAIMED || rc == FOREIGN_OK);
+}
+
 #endif /*  _FOREIGN_H */
