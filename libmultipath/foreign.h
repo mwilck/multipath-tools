@@ -83,7 +83,7 @@ struct foreign {
 	 * immediately, because multipathd may need to try to release the device
 	 * and may fail doing so. If it succeeds, it will call add() afterwards.
 	 * FOREIGN_UNCLAIMED: previously claimed device is now ignored. The
-	 * internal state is not updated yet, multipathd will call remove()
+	 * internal state is not updated yet, multipathd will call delete()
 	 * after handling this return value successfully.
 	 * FOREIGN_ERR: error processing device (will be treated like
 	 * FOREIGN_IGNORED).
@@ -91,30 +91,30 @@ struct foreign {
 	int (*change)(struct context *, struct udev_device *);
 
 	/*
-	 * method: remove
+	 * method: delete
 	 *
-	 * This is called on udev REMOVE events.
+	 * This is called on udev DELETE events.
 	 *
 	 * Return values:
-	 * FOREIGN_OK: processed correctly (device removed)
+	 * FOREIGN_OK: processed correctly (device deleted)
 	 * FOREIGN_IGNORED: device wasn't registered internally
 	 * FOREIGN_ERR: error occured (will be treated like
 	 * FOREIGN_IGNORED).
 	 */
-	int (*remove)(struct context *, struct udev_device *);
+	int (*delete)(struct context *, struct udev_device *);
 
 	/*
-	 * method: remove_all
+	 * method: delete_all
 	 *
 	 * This is called if multipathd reconfigures itself.
-	 * Remove all registered devices.
+	 * Delete all registered devices.
 	 *
 	 * Return values:
 	 * FOREIGN_OK: processed correctly
-	 * FOREIGN_IGNORED: foreign had nothing to remove
+	 * FOREIGN_IGNORED: foreign had nothing to delete
 	 * FOREIGN_ERR: error occured
 	 */
-	int (*remove_all)(struct context*);
+	int (*delete_all)(struct context*);
 
 	/*
 	 * method: check
@@ -152,8 +152,8 @@ int init_foreign(const char *multipath_dir);
 void cleanup_foreign(void);
 int add_foreign(struct udev_device *);
 int change_foreign(struct udev_device *);
-int remove_foreign(struct udev_device *);
-int remove_all_foreign(void);
+int delete_foreign(struct udev_device *);
+int delete_all_foreign(void);
 void check_foreign(void);
 const struct _vector *get_foreign_multipaths(void);
 const struct _vector *get_foreign_paths(void);

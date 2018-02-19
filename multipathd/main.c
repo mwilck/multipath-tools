@@ -809,7 +809,7 @@ uev_remove_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 	int ret;
 
 	condlog(2, "%s: remove path (uevent)", uev->kernel);
-	remove_foreign(uev->udev);
+	delete_foreign(uev->udev);
 
 	pthread_cleanup_push(cleanup_lock, &vecs->lock);
 	lock(&vecs->lock);
@@ -945,7 +945,7 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
 		/*
 		 * TBD: un-orphan the path, check for another foreign
 		 * library or ourselves to claim it, and finally call
-		 * remove_foreign().
+		 * delete_foreign().
 		 * For now, pretend that the path is still handled by
 		 * this foreign library (it hasn't released it yet).
 		 */
@@ -1165,7 +1165,7 @@ uev_trigger (struct uevent * uev, void * trigger_data)
 			if (!strncmp(uev->action, "change", 6))
 				(void)add_foreign(uev->udev);
 			else if (!strncmp(uev->action, "remove", 6))
-				(void)remove_foreign(uev->udev);
+				(void)delete_foreign(uev->udev);
 			goto out;
 		}
 		if (!strncmp(uev->action, "change", 6)) {
@@ -2165,7 +2165,7 @@ reconfigure (struct vectors * vecs)
 
 	free_pathvec(vecs->pathvec, FREE_PATHS);
 	vecs->pathvec = NULL;
-	remove_all_foreign();
+	delete_all_foreign();
 
 	/* Re-read any timezone changes */
 	tzset();

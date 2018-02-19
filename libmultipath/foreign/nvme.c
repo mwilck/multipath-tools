@@ -33,7 +33,7 @@ struct context {
 	vector mpvec;
 };
 
-int remove_all(struct context *ctx)
+int delete_all(struct context *ctx)
 {
 	condlog(4, "%s called for \"%s\"", __func__, THIS);
 	return FOREIGN_IGNORED;
@@ -44,7 +44,7 @@ void cleanup(struct context *ctx)
 	if (ctx == NULL)
 		return;
 
-	(void)remove_all(ctx);
+	(void)delete_all(ctx);
 	if (ctx->mpvec != NULL)
 		vector_free(ctx->mpvec);
 	pthread_mutex_destroy(&ctx->mutex);
@@ -89,7 +89,7 @@ int change(struct context *ctx, struct udev_device *ud)
 	return FOREIGN_IGNORED;
 }
 
-int remove(struct context *ctx, struct udev_device *ud)
+int delete(struct context *ctx, struct udev_device *ud)
 {
 	condlog(4, "%s called for \"%s\"", __func__, THIS);
 	return FOREIGN_IGNORED;

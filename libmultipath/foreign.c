@@ -158,8 +158,8 @@ int init_foreign(const char *multipath_dir)
 		get_dlsym(fgn, cleanup, dl_err);
 		get_dlsym(fgn, add, dl_err);
 		get_dlsym(fgn, change, dl_err);
-		get_dlsym(fgn, remove, dl_err);
-		get_dlsym(fgn, remove_all, dl_err);
+		get_dlsym(fgn, delete, dl_err);
+		get_dlsym(fgn, delete_all, dl_err);
 		get_dlsym(fgn, check, dl_err);
 		get_dlsym(fgn, get_multipaths, dl_err);
 		get_dlsym(fgn, get_paths, dl_err);
@@ -255,7 +255,7 @@ int change_foreign(struct udev_device *udev)
 	return FOREIGN_IGNORED;
 }
 
-int remove_foreign(struct udev_device *udev)
+int delete_foreign(struct udev_device *udev)
 {
 	struct foreign *fgn;
 	int j;
@@ -267,10 +267,10 @@ int remove_foreign(struct udev_device *udev)
 	}
 	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
-		int r = fgn->remove(fgn->context, udev);
+		int r = fgn->delete(fgn->context, udev);
 
 		if (r == FOREIGN_OK) {
-			condlog(2, "%s: foreign \"%s\" removed device %d:%d",
+			condlog(2, "%s: foreign \"%s\" deleted device %d:%d",
 				__func__, fgn->name, major(dt), minor(dt));
 			return r;
 		} else if (r != FOREIGN_IGNORED) {
@@ -281,7 +281,7 @@ int remove_foreign(struct udev_device *udev)
 	return FOREIGN_IGNORED;
 }
 
-int remove_all_foreign(void)
+int delete_all_foreign(void)
 {
 	struct foreign *fgn;
 	int j;
@@ -289,7 +289,7 @@ int remove_all_foreign(void)
 	vector_foreach_slot(foreigns, fgn, j) {
 		int r;
 
-		r = fgn->remove_all(fgn->context);
+		r = fgn->delete_all(fgn->context);
 		if (r != FOREIGN_IGNORED && r != FOREIGN_OK) {
 			condlog(1, "%s: unexpected return value %d from \"%s\"",
 				__func__, r, fgn->name);
