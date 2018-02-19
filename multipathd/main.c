@@ -930,35 +930,24 @@ fail:
 static int
 uev_update_path (struct uevent *uev, struct vectors * vecs)
 {
-	int ro, retval = 0;
+	int ro, retval = 0, rc;
 	struct path * pp;
 	struct config *conf;
 	int disable_changed_wwids;
 	int needs_reinit = 0;
 
-	switch (change_foreign(uev->udev)) {
+	switch ((rc = change_foreign(uev->udev))) {
 	case FOREIGN_OK:
 		/* known foreign path, ignore event */
 		return 0;
-	case FOREIGN_UNCLAIMED:
-		condlog(0, "%s: un-claiming currently unsupported", __func__);
-		/*
-		 * TBD: un-orphan the path, check for another foreign
-		 * library or ourselves to claim it, and finally call
-		 * delete_foreign().
-		 * For now, pretend that the path is still handled by
-		 * this foreign library (it hasn't released it yet).
-		 */
-		return 0;
-	case FOREIGN_CLAIMED:
-		condlog(0, "%s: claiming on change currently unsupported",
-			__func__);
-		/*
-		 * TBD: try to free the path from the current holder, and
-		 * call add_foreign() if successful.
-		 */
+	case FOREIGN_IGNORED:
+		break;
+	case FOREIGN_ERR:
+		condlog(3, "%s: error in change_foreign", __func__);
 		break;
 	default:
+		condlog(1, "%s: return code %d of change_forein is unsupported",
+			__func__, rc);
 		break;
 	}
 
