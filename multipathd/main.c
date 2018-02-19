@@ -1965,7 +1965,7 @@ checkerloop (void *ap)
 						diff_time.tv_sec);
 			}
 		}
-
+		check_foreign();
 		post_config_state(DAEMON_IDLE);
 		conf = get_multipath_config();
 		strict_timing = conf->strict_timing;
