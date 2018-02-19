@@ -18,54 +18,111 @@
 */
 
 #include <sys/sysmacros.h>
+#include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 #include <libudev.h>
 #include <pthread.h>
 #include "vector.h"
 #include "generic.h"
 #include "foreign.h"
-#include "lock.h"
 #include "debug.h"
 
 const char *THIS;
 
 struct nvme_map {
 	struct gen_multipath gen;
-	const char *wwid;
-	const char *model;
-	const char *firmware_rev;
-	const char *serial;
-	const char *subsysnqn;
+	struct udev_device *udev;
+	struct udev_device *subsys;
 	dev_t devt;
 };
 
+#define NAME_LEN 64 /* buffer length temp model name */
 #define const_gen_mp_to_nvme(g) ((const struct nvme_map*)(g))
 #define gen_mp_to_nvme(g) ((struct nvme_map*)(g))
 #define nvme_mp_to_gen(n) &((n)->gen)
 
-struct context {
-	pthread_mutex_t mutex;
-	vector mpvec;
-};
+static void cleanup_nvme_map(struct nvme_map *map)
+{
+	if (map->udev)
+		udev_device_unref(map->udev);
+	if (map->subsys)
+		udev_device_unref(map->subsys);
+	free(map);
+}
 
 static const struct _vector*
 nvme_mp_get_pgs(const struct gen_multipath *gmp) {
 	return NULL;
 }
 
+static void
+nvme_mp_rel_pgs(const struct gen_multipath *gmp, const struct _vector *v)
+{
+}
+
+static void rstrip(char *str)
+{
+	int n;
+
+	for (n = strlen(str) - 1; n >= 0 && str[n] == ' '; n--);
+	str[n+1] = '\0';
+}
+
 static int snprint_nvme_map(const struct gen_multipath *gmp,
 			    char *buff, int len, char wildcard)
 {
 	const struct nvme_map *nvm = const_gen_mp_to_nvme(gmp);
+	static const char nvme_vendor[] = "NVMe";
+	char fld[NAME_LEN];
+	const char *val;
 
 	switch (wildcard) {
+	case 'd':
+		return snprintf(buff, len, "%s",
+				udev_device_get_sysname(nvm->udev));
 	case 'n':
-		return snprintf(buff, len, "(%d:%d)",
-				major(nvm->devt), minor(nvm->devt));
-	case 'R':
-		return snprintf(buff, len, "[foreign: %s]", THIS);
+		return snprintf(buff, len, "%s:NQN:%s",
+				udev_device_get_sysname(nvm->subsys),
+				udev_device_get_sysattr_value(nvm->subsys,
+							      "subsysnqn"));
+	case 'w':
+		return snprintf(buff, len, "%s",
+				udev_device_get_sysattr_value(nvm->udev,
+							      "wwid"));
+	case 'S':
+		return snprintf(buff, len, "%s",
+				udev_device_get_sysattr_value(nvm->udev,
+							      "size"));
+	case 'v':
+		return snprintf(buff, len, "%s", nvme_vendor);
+	case 's':
+	case 'p':
+		snprintf(fld, sizeof(fld), "%s",
+			 udev_device_get_sysattr_value(nvm->subsys,
+						      "model"));
+		rstrip(fld);
+		if (wildcard == 'p')
+			return snprintf(buff, len, "%s", fld);
+		return snprintf(buff, len, "%s,%s,%s", nvme_vendor, fld,
+				udev_device_get_sysattr_value(nvm->subsys,
+							      "firmware_rev"));
+	case 'e':
+		return snprintf(buff, len, "%s",
+				udev_device_get_sysattr_value(nvm->subsys,
+							      "firmware_rev"));
+	case 'r':
+		val = udev_device_get_sysattr_value(nvm->udev, "ro");
+		if (val[0] == 1)
+			return snprintf(buff, len, "%s", "ro");
+		else
+			return snprintf(buff, len, "%s", "rw");
+	case 'G':
+		return snprintf(buff, len, "%s", THIS);
 	default:
+		return snprintf(buff, len, "N/A");
 		break;
 	}
 	return 0;
@@ -74,6 +131,11 @@ static int snprint_nvme_map(const struct gen_multipath *gmp,
 static const struct _vector*
 nvme_pg_get_paths(const struct gen_pathgroup *gpg) {
 	return NULL;
+}
+
+static void
+nvme_pg_rel_paths(const struct gen_pathgroup *gpg, const struct _vector *v)
+{
 }
 
 static int snprint_nvme_pg(const struct gen_pathgroup *gmp,
@@ -96,12 +158,14 @@ static int snprint_nvme_path(const struct gen_path *gmp,
 
 static const struct gen_multipath_ops nvme_map_ops = {
 	.get_pathgroups = nvme_mp_get_pgs,
+	.rel_pathgroups = nvme_mp_rel_pgs,
 	.style = generic_style,
 	.snprint = snprint_nvme_map,
 };
 
 static const struct gen_pathgroup_ops nvme_pg_ops __attribute__((unused)) = {
 	.get_paths = nvme_pg_get_paths,
+	.rel_paths = nvme_pg_rel_paths,
 	.snprint = snprint_nvme_pg,
 };
 
@@ -109,10 +173,50 @@ static const struct gen_path_ops nvme_path_ops __attribute__((unused)) = {
 	.snprint = snprint_nvme_path,
 };
 
+struct context {
+	pthread_mutex_t mutex;
+	vector mpvec;
+};
+
+void lock(struct context *ctx)
+{
+	pthread_mutex_lock(&ctx->mutex);
+}
+
+void unlock(void *arg)
+{
+	struct context *ctx = arg;
+
+	pthread_mutex_unlock(&ctx->mutex);
+}
+
+static int _delete_all(struct context *ctx)
+{
+	struct nvme_map *nm;
+	int n = VECTOR_SIZE(ctx->mpvec), i;
+
+	if (n == 0)
+		return FOREIGN_IGNORED;
+
+	vector_foreach_slot_backwards(ctx->mpvec, nm, i) {
+		vector_del_slot(ctx->mpvec, i);
+		cleanup_nvme_map(nm);
+	}
+	return FOREIGN_OK;
+}
+
 int delete_all(struct context *ctx)
 {
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
-	return FOREIGN_IGNORED;
+	int rc;
+
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
+
+	lock(ctx);
+	pthread_cleanup_push(unlock, ctx);
+	rc = _delete_all(ctx);
+	pthread_cleanup_pop(1);
+
+	return rc;
 }
 
 void cleanup(struct context *ctx)
@@ -121,9 +225,13 @@ void cleanup(struct context *ctx)
 		return;
 
 	(void)delete_all(ctx);
-	if (ctx->mpvec != NULL)
-		vector_free(ctx->mpvec);
+
+	lock(ctx);
+	pthread_cleanup_push(unlock, ctx);
+	vector_free(ctx->mpvec);
+	pthread_cleanup_pop(1);
 	pthread_mutex_destroy(&ctx->mutex);
+
 	free(ctx);
 }
 
@@ -153,7 +261,7 @@ err:
 	return NULL;
 }
 
-static struct nvme_map *find_nvme_map_by_devt(const struct context *ctx,
+static struct nvme_map *_find_nvme_map_by_devt(const struct context *ctx,
 					      dev_t devt)
 {
 	struct nvme_map *nm;
@@ -170,25 +278,13 @@ static struct nvme_map *find_nvme_map_by_devt(const struct context *ctx,
 	return NULL;
 }
 
-int add(struct context *ctx, struct udev_device *ud)
+static int _add_map(struct context *ctx, struct udev_device *ud,
+		    struct udev_device *subsys)
 {
-	struct udev_device *subsys;
+	dev_t devt = udev_device_get_devnum(ud);
 	struct nvme_map *map;
-	dev_t devt;
 
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
-
-	if (ud == NULL)
-		return FOREIGN_ERR;
-
-	subsys = udev_device_get_parent_with_subsystem_devtype(ud,
-							       "nvme-subsystem",
-							       NULL);
-	if (subsys == NULL)
-		return FOREIGN_IGNORED;
-
-	devt = udev_device_get_devnum(ud);
-	if (find_nvme_map_by_devt(ctx, devt) != NULL)
+	if (_find_nvme_map_by_devt(ctx, devt) != NULL)
 		return FOREIGN_OK;
 
 	map = calloc(1, sizeof(*map));
@@ -196,37 +292,153 @@ int add(struct context *ctx, struct udev_device *ud)
 		return FOREIGN_ERR;
 
 	map->devt = devt;
+	map->udev = udev_device_ref(ud);
+	map->subsys = udev_device_ref(subsys);
 	map->gen.ops = &nvme_map_ops;
+
+	if (vector_alloc_slot(ctx->mpvec) == NULL) {
+		cleanup_nvme_map(map);
+		return FOREIGN_ERR;
+	}
+
+	vector_set_slot(ctx->mpvec, map);
 
 	return FOREIGN_CLAIMED;
 }
 
+int add(struct context *ctx, struct udev_device *ud)
+{
+	struct udev_device *subsys;
+	int rc;
+
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
+
+	if (ud == NULL)
+		return FOREIGN_ERR;
+	if (strcmp("disk", udev_device_get_devtype(ud)))
+		return FOREIGN_IGNORED;
+
+	subsys = udev_device_get_parent_with_subsystem_devtype(ud,
+							       "nvme-subsystem",
+							       NULL);
+	if (subsys == NULL)
+		return FOREIGN_IGNORED;
+
+	lock(ctx);
+	pthread_cleanup_push(unlock, ctx);
+	rc = _add_map(ctx, ud, subsys);
+	pthread_cleanup_pop(1);
+
+	if (rc == FOREIGN_CLAIMED)
+		condlog(3, "%s: %s: added map %s", __func__, THIS,
+			udev_device_get_sysname(ud));
+	else if (rc != FOREIGN_OK)
+		condlog(1, "%s: %s: retcode %d adding %s",
+			__func__, THIS, rc, udev_device_get_sysname(ud));
+
+	return rc;
+}
+
 int change(struct context *ctx, struct udev_device *ud)
 {
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
 	return FOREIGN_IGNORED;
+}
+
+static int _delete_map(struct context *ctx, struct udev_device *ud)
+{
+	int k;
+	struct nvme_map *map;
+	dev_t devt = udev_device_get_devnum(ud);
+
+	map = _find_nvme_map_by_devt(ctx, devt);
+	if (map ==NULL)
+		return FOREIGN_IGNORED;
+
+	k = find_slot(ctx->mpvec, map);
+	if (k == -1)
+		return FOREIGN_ERR;
+	else
+		vector_del_slot(ctx->mpvec, k);
+
+	cleanup_nvme_map(map);
+
+	return FOREIGN_OK;
 }
 
 int delete(struct context *ctx, struct udev_device *ud)
 {
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
-	return FOREIGN_IGNORED;
+	int rc;
+
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
+
+	if (ud == NULL)
+		return FOREIGN_ERR;
+
+	lock(ctx);
+	pthread_cleanup_push(unlock, ctx);
+	rc = _delete_map(ctx, ud);
+	pthread_cleanup_pop(1);
+
+	if (rc == FOREIGN_OK)
+		condlog(3, "%s: %s: map %s deleted", __func__, THIS,
+			udev_device_get_sysname(ud));
+	else if (rc != FOREIGN_IGNORED)
+		condlog(1, "%s: %s: retcode %d deleting map %s", __func__,
+			THIS, rc, udev_device_get_sysname(ud));
+
+	return rc;
 }
 
 void check(struct context *ctx)
 {
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
 	return;
 }
 
-vector* get_multipaths(const struct context *ctx)
+/*
+ * It's safe to pass our internal pointer, this is only used under the lock.
+ */
+const struct _vector *get_multipaths(const struct context *ctx)
 {
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
+	return ctx->mpvec;
+}
+
+void release_multipaths(const struct context *ctx, const struct _vector *mpvec)
+{
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
+	/* NOP */
+}
+
+/*
+ * It's safe to pass our internal pointer, this is only used under the lock.
+ */
+const struct _vector * get_paths(const struct context *ctx)
+{
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
 	return NULL;
 }
 
-vector* get_paths(const struct context *ctx)
+void release_paths(const struct context *ctx, const struct _vector *mpvec)
 {
-	condlog(4, "%s called for \"%s\"", __func__, THIS);
-	return NULL;
+	condlog(5, "%s called for \"%s\"", __func__, THIS);
+	/* NOP */
 }
+
+/* compile-time check whether all methods are present and correctly typed */
+#define _METHOD_INIT(x) .x = x
+static struct foreign __methods __attribute__((unused)) = {
+	_METHOD_INIT(init),
+	_METHOD_INIT(cleanup),
+	_METHOD_INIT(change),
+	_METHOD_INIT(delete),
+	_METHOD_INIT(delete_all),
+	_METHOD_INIT(check),
+	_METHOD_INIT(lock),
+	_METHOD_INIT(unlock),
+	_METHOD_INIT(get_multipaths),
+	_METHOD_INIT(release_multipaths),
+	_METHOD_INIT(get_paths),
+	_METHOD_INIT(release_paths),
+};
