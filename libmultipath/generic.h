@@ -29,7 +29,7 @@ struct gen_multipath_ops {
 	 * return a newly allocated vector of const struct gen_pathgroup*
 	 * caller is responsible to free it (don't try to free members!)
 	 */
-	vector (*get_pathgroups)(const struct gen_multipath*);
+	const struct _vector* (*get_pathgroups)(const struct gen_multipath*);
 	/*
 	 * print the property of the multipath map matching
 	 * the passed-in wildcard character into "buf", 0-terminated,
@@ -51,7 +51,7 @@ struct gen_pathgroup_ops {
 	 * return a vector of const struct gen_path*
 	 * caller is responsible to free it (don't try to free members!)
 	 */
-	vector (*get_paths)(const struct gen_pathgroup*);
+	const struct _vector* (*get_paths)(const struct gen_pathgroup*);
 	/* see above */
 	int (*snprint)(const struct gen_pathgroup*,
 		       char *buf, int len, char wildcard);
