@@ -50,7 +50,6 @@ static void free_foreign(struct foreign **fgn)
 {
 	if (fgn == NULL || *fgn == NULL)
 		return;
-	condlog(4, "%s: freeing \"%s\"", __func__, (*fgn)->name);
 	if ((*fgn)->context != NULL)
 		(*fgn)->cleanup((*fgn)->context);
 	if ((*fgn)->handle != NULL)
@@ -94,7 +93,7 @@ int init_foreign(const char *multipath_dir)
 	r = glob(pathbuf, 0, NULL, &globbuf);
 
 	if (r == GLOB_NOMATCH) {
-		condlog(2, "%s: no foreign multipath libraries found",
+		condlog(3, "%s: no foreign multipath libraries found",
 			__func__);
 		globfree(&globbuf);
 		return 0;
@@ -180,7 +179,7 @@ int init_foreign(const char *multipath_dir)
 			continue;
 		}
 		vector_set_slot(foreigns, fgn);
-		condlog(2, "foreign library \"%s\" loaded successfully", fgn->name);
+		condlog(3, "foreign library \"%s\" loaded successfully", fgn->name);
 
 		continue;
 
@@ -274,7 +273,7 @@ int delete_foreign(struct udev_device *udev)
 		int r = fgn->delete(fgn->context, udev);
 
 		if (r == FOREIGN_OK) {
-			condlog(2, "%s: foreign \"%s\" deleted device %d:%d",
+			condlog(3, "%s: foreign \"%s\" deleted device %d:%d",
 				__func__, fgn->name, major(dt), minor(dt));
 			return r;
 		} else if (r != FOREIGN_IGNORED) {
