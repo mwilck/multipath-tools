@@ -172,7 +172,7 @@ static void test_dm_name_good(void **state)
 	const char *name = uevent_get_dm_name(uev);
 
 	assert_string_equal(name, DM_NAME);
-	free((void*)name);
+	FREE_CONST(name);
 }
 
 static void test_dm_name_bad_0(void **state)
@@ -183,7 +183,7 @@ static void test_dm_name_bad_0(void **state)
 	uev->envp[3] = "DM_NAME" DM_NAME;
 	name = uevent_get_dm_name(uev);
 	assert_ptr_equal(name, NULL);
-	free((void*)name);
+	FREE_CONST(name);
 }
 
 static void test_dm_name_bad_1(void **state)
@@ -194,7 +194,7 @@ static void test_dm_name_bad_1(void **state)
 	uev->envp[3] = "DM_NAMES=" DM_NAME;
 	name = uevent_get_dm_name(uev);
 	assert_ptr_equal(name, NULL);
-	free((void*)name);
+	FREE_CONST(name);
 }
 
 static void test_dm_name_good_1(void **state)
@@ -206,7 +206,7 @@ static void test_dm_name_good_1(void **state)
 	uev->envp[2] = "DM_NAME=" DM_NAME;
 	name = uevent_get_dm_name(uev);
 	assert_string_equal(name, DM_NAME);
-	free((void*)name);
+	FREE_CONST(name);
 }
 
 static void test_dm_uuid_false_0(void **state)
