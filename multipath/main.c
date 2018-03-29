@@ -595,6 +595,15 @@ configure (struct config *conf, enum mpath_cmds cmd,
 			    !ignore_wwids_on(conf)) {
 				goto print_valid;
 			}
+			/*
+			 * Shortcut for find_multipaths smart:
+			 * Quick check if path is already multipathed.
+			 */
+			if (ignore_wwids_on(conf) &&
+			    sysfs_is_multipathed(VECTOR_SLOT(pathvec, 0))) {
+				r = 0;
+				goto print_valid;
+			}
 		}
 	}
 
@@ -667,7 +676,10 @@ configure (struct config *conf, enum mpath_cmds cmd,
 			condlog(3, "%s: path %s is in use: %s",
 				__func__, pp->dev,
 				strerror(errno));
-			r = 1;
+			/*
+			 * Check if we raced with multipathd
+			 */
+			r = !sysfs_is_multipathed(VECTOR_SLOT(pathvec, 0));
 		}
 		goto print_valid;
 	}
