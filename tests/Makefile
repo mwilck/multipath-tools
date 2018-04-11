@@ -3,7 +3,7 @@ include ../Makefile.inc
 CFLAGS += $(BIN_CFLAGS) -I$(multipathdir) -I$(mpathcmddir)
 LIBDEPS += -L$(multipathdir) -lmultipath -lcmocka
 
-TESTS := uevent parser util dmevents
+TESTS := uevent parser util dmevents hwtable
 
 .SILENT: $(TESTS:%=%.o)
 .PRECIOUS: $(TESTS:%=%-test)
@@ -18,6 +18,8 @@ all:	$(TESTS:%=%.out)
 # XYZ-test_LIBDEPS: Additional libs to link for this test
 
 dmevents-test_LIBDEPS = -lpthread -ldevmapper -lurcu
+hwtable-test_OBJDEPS := ../libmultipath/discovery.o
+hwtable-test_LIBDEPS := -ludev -lpthread
 
 %.out:	%-test
 	@echo == running $< ==
