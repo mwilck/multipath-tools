@@ -452,7 +452,7 @@ static void replicate_config(const struct hwt_state *hwt, bool local)
 	vector hwtable;
 	struct config *conf;
 
-	condlog(1, "--- %s: replicating %s configuration", __func__,
+	condlog(3, "--- %s: replicating %s configuration", __func__,
 		local ? "local" : "full");
 
 	conf = get_multipath_config();
@@ -517,7 +517,6 @@ static void test_driver(void **state)
 	const struct hwt_state *hwt;
 
 	hwt = CHECK_STATE(state);
-	condlog(1, "### %s: testing: %s", __func__, hwt->test_name);
 	_conf = LOAD_CONFIG(hwt);
 	hwt->test(hwt);
 
@@ -1617,51 +1616,83 @@ static int setup_multipath_config_3(void **state)
 	return 0;
 }
 
+/*
+ * Create wrapper functions around test_driver() to avoid that cmocka
+ * always uses the same test name. That makes it easier to read test results.
+ */
+
+#define define_test(x)				\
+	static void run_##x(void **state)	\
+	{					\
+		return test_driver(state);	\
+	}
+
+define_test(string_hwe)
+define_test(internal_nvme)
+define_test(quoted_hwe)
+define_test(regex_hwe)
+define_test(regex_string_hwe)
+define_test(regex_string_hwe_dir)
+define_test(regex_2_strings_hwe_dir)
+define_test(string_regex_hwe_dir)
+define_test(2_ident_strings_hwe)
+define_test(2_ident_strings_both_dir)
+define_test(2_ident_strings_both_dir_w_prev)
+define_test(2_ident_strings_hwe_dir)
+define_test(3_ident_strings_hwe_dir)
+define_test(2_ident_self_matching_re_hwe_dir)
+define_test(2_ident_self_matching_re_hwe)
+define_test(2_ident_not_self_matching_re_hwe_dir)
+define_test(2_matching_res_hwe_dir)
+define_test(2_nonmatching_res_hwe_dir)
+define_test(blacklist)
+define_test(blacklist_wwid)
+define_test(blacklist_wwid_1)
+define_test(blacklist_regex)
+define_test(blacklist_regex_inv)
+define_test(blacklist_regex_matching)
+define_test(product_blacklist)
+define_test(product_blacklist_matching)
+define_test(multipath_config)
+define_test(multipath_config_2)
+define_test(multipath_config_3)
+
+#define test_entry(x) \
+	cmocka_unit_test_setup(run_##x, setup_##x)
+
 static int test_hwtable(void)
 {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_sanity_globals),
-		cmocka_unit_test_setup(test_driver, setup_internal_nvme),
-		cmocka_unit_test_setup(test_driver, setup_string_hwe),
-		cmocka_unit_test_setup(test_driver, setup_quoted_hwe),
-		cmocka_unit_test_setup(test_driver, setup_regex_hwe),
-		cmocka_unit_test_setup(test_driver, setup_regex_string_hwe),
-		cmocka_unit_test_setup(test_driver, setup_regex_string_hwe_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_regex_2_strings_hwe_dir),
-		cmocka_unit_test_setup(test_driver, setup_string_regex_hwe_dir),
-		cmocka_unit_test_setup(test_driver, setup_2_ident_strings_hwe),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_ident_strings_both_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_ident_strings_both_dir_w_prev),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_ident_strings_hwe_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_3_ident_strings_hwe_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_ident_self_matching_re_hwe_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_ident_self_matching_re_hwe),
-		cmocka_unit_test_setup(test_driver,
-				setup_2_ident_not_self_matching_re_hwe_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_matching_res_hwe_dir),
-		cmocka_unit_test_setup(test_driver,
-				       setup_2_nonmatching_res_hwe_dir),
-		cmocka_unit_test_setup(test_driver, setup_blacklist),
-		cmocka_unit_test_setup(test_driver, setup_blacklist_wwid),
-		cmocka_unit_test_setup(test_driver, setup_blacklist_wwid_1),
-		cmocka_unit_test_setup(test_driver, setup_blacklist_regex),
-		cmocka_unit_test_setup(test_driver, setup_blacklist_regex_inv),
-		cmocka_unit_test_setup(test_driver,
-				       setup_blacklist_regex_matching),
-		cmocka_unit_test_setup(test_driver, setup_product_blacklist),
-		cmocka_unit_test_setup(test_driver,
-		setup_product_blacklist_matching),
-		cmocka_unit_test_setup(test_driver, setup_multipath_config),
-		cmocka_unit_test_setup(test_driver, setup_multipath_config_2),
-		cmocka_unit_test_setup(test_driver, setup_multipath_config_3),
+		test_entry(internal_nvme),
+		test_entry(string_hwe),
+		test_entry(quoted_hwe),
+		test_entry(regex_hwe),
+		test_entry(regex_string_hwe),
+		test_entry(regex_string_hwe_dir),
+		test_entry(regex_2_strings_hwe_dir),
+		test_entry(string_regex_hwe_dir),
+		test_entry(2_ident_strings_hwe),
+		test_entry(2_ident_strings_both_dir),
+		test_entry(2_ident_strings_both_dir_w_prev),
+		test_entry(2_ident_strings_hwe_dir),
+		test_entry(3_ident_strings_hwe_dir),
+		test_entry(2_ident_self_matching_re_hwe_dir),
+		test_entry(2_ident_self_matching_re_hwe),
+		test_entry(2_ident_not_self_matching_re_hwe_dir),
+		test_entry(2_matching_res_hwe_dir),
+		test_entry(2_nonmatching_res_hwe_dir),
+		test_entry(blacklist),
+		test_entry(blacklist_wwid),
+		test_entry(blacklist_wwid_1),
+		test_entry(blacklist_regex),
+		test_entry(blacklist_regex_inv),
+		test_entry(blacklist_regex_matching),
+		test_entry(product_blacklist),
+		test_entry(product_blacklist_matching),
+		test_entry(multipath_config),
+		test_entry(multipath_config_2),
+		test_entry(multipath_config_3),
 	};
 
 	return cmocka_run_group_tests(tests, setup, teardown);
