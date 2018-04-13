@@ -362,7 +362,7 @@ enum {
 };
 
 static const char shm_find_mp_dir[] = MULTIPATH_SHM_BASE "find_multipaths";
-static void close_fd(void* arg)
+static void close_fd(void *arg)
 {
 	close((long)arg);
 }
@@ -376,7 +376,7 @@ static void close_fd(void* arg)
  * @param[out] until: timestamp until we must wait, CLOCK_REALTIME, if return
  *             value is FIND_MULTIPATHS_WAITING
  * @returns: FIND_MULTIPATHS_WAIT_DONE, if waiting has finished
- * @returns: FIND_MULTIPATHS_ERROR, if internal error occured
+ * @returns: FIND_MULTIPATHS_ERROR, if internal error occurred
  * @returns: FIND_MULTIPATHS_NEVER, if tmo is 0 and we didn't wait for this
  *           device
  * @returns: FIND_MULTIPATHS_WAITING, if timeout hasn't expired
@@ -406,7 +406,7 @@ static int find_multipaths_check_timeout(const struct path *pp, long tmo,
 retry:
 	fd = open(path, O_RDONLY);
 	if (fd != -1) {
-		pthread_cleanup_push(close_fd, (void*)fd);
+		pthread_cleanup_push(close_fd, (void *)fd);
 		r = fstat(fd, &st);
 		if (r != 0)
 			err = errno;
@@ -424,7 +424,7 @@ retry:
 			return FIND_MULTIPATHS_ERROR;
 		};
 
-		pthread_cleanup_push(close_fd, (void*)fd);
+		pthread_cleanup_push(close_fd, (void *)fd);
 		/*
 		 * We just created the file. Set st_mtim to our desired
 		 * expiry time.
@@ -454,10 +454,9 @@ retry:
 
 	if (tdiff.tv_sec <= 0)
 		return FIND_MULTIPATHS_WAIT_DONE;
-	else {
-		*until = tdiff;
-		return FIND_MULTIPATHS_WAITING;
-	}
+
+	*until = tdiff;
+	return FIND_MULTIPATHS_WAITING;
 }
 
 static int print_cmd_valid(int k, const vector pathvec,
