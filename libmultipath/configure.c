@@ -447,8 +447,8 @@ trigger_udev_change(const struct multipath *mpp)
 void
 trigger_paths_udev_change(const struct multipath *mpp)
 {
-	struct pathgroup * pgp;
-	struct path * pp;
+	struct pathgroup *pgp;
+	struct path *pp;
 	int i, j;
 
 	if (!mpp || !mpp->pg)
