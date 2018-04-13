@@ -240,7 +240,7 @@ declare_def_snprint(multipath_dir, print_str)
 declare_def_handler(partition_delim, set_str)
 declare_def_snprint(partition_delim, print_str)
 
-static const char *find_multipaths_optvals[] = {
+static const char * const find_multipaths_optvals[] = {
 	[FIND_MULTIPATHS_OFF] = "off",
 	[FIND_MULTIPATHS_ON] = "on",
 	[FIND_MULTIPATHS_STRICT] = "strict",
