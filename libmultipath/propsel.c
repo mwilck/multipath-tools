@@ -971,7 +971,7 @@ out:
 		if (!pp->hwe) {
 			pp->find_multipaths_timeout =
 				DEFAULT_UNKNOWN_FIND_MULTIPATHS_TIMEOUT;
-			origin = "(default for unkown hardware)";
+			origin = "(default for unknown hardware)";
 		}
 	}
 	condlog(3, "%s: timeout for find_multipaths \"smart\" = %ds %s",
