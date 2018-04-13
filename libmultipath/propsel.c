@@ -956,7 +956,7 @@ out:
 
 int select_find_multipaths_timeout(struct config *conf, struct path *pp)
 {
-	char *origin;
+	const char *origin;
 
 	pp_set_conf(find_multipaths_timeout);
 	pp_set_default(find_multipaths_timeout,
