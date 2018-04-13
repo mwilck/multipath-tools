@@ -24,10 +24,12 @@ TEST!="$env{MPATH_SBIN_PATH}/multipath", ENV{MPATH_SBIN_PATH}="/usr/sbin"
 IMPORT{db}="FIND_MULTIPATHS_WAIT_UNTIL"
 ENV{.SAVED_FM_WAIT_UNTIL}="$env{FIND_MULTIPATHS_WAIT_UNTIL}"
 
+# multipath -u needs to know if this device has ever been exported
+IMPORT{db}="DM_MULTIPATH_DEVICE_PATH"
+
 # multipath -u sets DM_MULTIPATH_DEVICE_PATH and,
 # if "find_multipaths smart", also FIND_MULTIPATHS_WAIT_UNTIL.
-ENV{DM_MULTIPATH_DEVICE_PATH}!="1", \
-	IMPORT{program}="$env{MPATH_SBIN_PATH}/multipath -u %k"
+IMPORT{program}="$env{MPATH_SBIN_PATH}/multipath -u %k"
 
 # case 1: this is definitely multipath
 ENV{DM_MULTIPATH_DEVICE_PATH}=="1", \
