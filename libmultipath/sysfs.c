@@ -339,7 +339,7 @@ bool sysfs_is_multipathed(const struct path *pp)
 			continue;
 		}
 
-		pthread_cleanup_push(close_fd, (void*)fd);
+		pthread_cleanup_push(close_fd, (void *)fd);
 		nr = read(fd, uuid, sizeof(uuid));
 		if (nr == sizeof(uuid) && !memcmp(uuid, "mpath-", sizeof(uuid)))
 			found = true;
