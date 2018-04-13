@@ -469,7 +469,7 @@ trigger_paths_udev_change(const struct multipath *mpp)
 			env = udev_device_get_property_value(
 				pp->udev, "DM_MULTIPATH_DEVICE_PATH");
 			if (env != NULL && !strcmp(env, "1"))
-					continue;
+				continue;
 
 			condlog(4, "triggering change uevent for %s", pp->dev);
 			sysfs_attr_set_value(pp->udev, "uevent", "change",
