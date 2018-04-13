@@ -375,7 +375,7 @@ static void multipath_shm_close(void *arg)
 }
 
 static int _failed_wwid_op(const char *wwid, bool rw,
-			   int(*func)(const char*), const char *msg)
+			   int (*func)(const char *), const char *msg)
 {
 	char path[PATH_MAX];
 	long lockfd;
@@ -391,7 +391,7 @@ static int _failed_wwid_op(const char *wwid, bool rw,
 	if (lockfd == -1)
 		return -1;
 
-	pthread_cleanup_push(multipath_shm_close, (void*)lockfd);
+	pthread_cleanup_push(multipath_shm_close, (void *)lockfd);
 	r = func(path);
 	pthread_cleanup_pop(1);
 
