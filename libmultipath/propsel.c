@@ -963,11 +963,11 @@ int select_find_multipaths_timeout(struct config *conf, struct path *pp)
 		       DEFAULT_FIND_MULTIPATHS_TIMEOUT);
 out:
 	/*
-	 * If configured value is negative, and this "unkown" hardware
+	 * If configured value is negative, and this "unknown" hardware
 	 * (no hwentry), use very small timeout to avoid delays.
 	 */
 	if (pp->find_multipaths_timeout < 0) {
-		pp->find_multipaths_timeout = - pp->find_multipaths_timeout;
+		pp->find_multipaths_timeout = -pp->find_multipaths_timeout;
 		if (!pp->hwe) {
 			pp->find_multipaths_timeout =
 				DEFAULT_UNKNOWN_FIND_MULTIPATHS_TIMEOUT;
