@@ -1255,15 +1255,10 @@ static void test_2_ident_not_self_matching_re_hwe_dir(void **state)
  * Two different non-trivial regexes kv1, kv2. The 1st one matches the 2nd, but
  * it doesn't match all possible strings matching the second.
  * ("ba[zy]" matches regex "ba[[rxy]", but "baz" does not).
- * This causes the first entry to be merged into the second, but both entries
- * to be kept.
  *
  * Expected: Devices matching both regexes get properties from both, kv2
  * taking precedence. Devices matching just one regex get properties from
  * that one regex only.
- *
- * Current: behaves as expected, except for devices that match only kv2.
- * Those get properties from kv1, too.
  */
 static void test_2_matching_res_hwe_dir(void **state)
 {
@@ -1299,8 +1294,7 @@ static void test_2_matching_res_hwe_dir(void **state)
 	pp = mock_path(vnd_foo.value, prd_baz.value, "0");
 	TEST_PROP(prio_name(&pp->prio), kv2[2].value);
 	TEST_PROP(pp->getuid, kv2[3].value);
-	TEST_PROP_BROKEN(_checker, pp->checker.name,
-			 kv1[3].value, DEFAULT_CHECKER);
+	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
 	free_path(pp);
 
 	FREE_CONFIG(_conf);

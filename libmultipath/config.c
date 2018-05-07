@@ -321,61 +321,6 @@ set_param_str(const char * str)
 	return dst;
 }
 
-#define merge_str(s) \
-	if (!dst->s && src->s) { \
-		if (!(dst->s = set_param_str(src->s))) \
-			return 1; \
-	}
-
-#define merge_num(s) \
-	if (!dst->s && src->s) \
-		dst->s = src->s
-
-
-static int
-merge_hwe (struct hwentry * dst, struct hwentry * src)
-{
-	char id[SCSI_VENDOR_SIZE+PATH_PRODUCT_SIZE];
-	merge_str(vendor);
-	merge_str(product);
-	merge_str(revision);
-	merge_str(getuid);
-	merge_str(uid_attribute);
-	merge_str(features);
-	merge_str(hwhandler);
-	merge_str(selector);
-	merge_str(checker_name);
-	merge_str(prio_name);
-	merge_str(prio_args);
-	merge_str(alias_prefix);
-	merge_str(bl_product);
-	merge_num(pgpolicy);
-	merge_num(pgfailback);
-	merge_num(rr_weight);
-	merge_num(no_path_retry);
-	merge_num(minio);
-	merge_num(minio_rq);
-	merge_num(flush_on_last_del);
-	merge_num(fast_io_fail);
-	merge_num(dev_loss);
-	merge_num(user_friendly_names);
-	merge_num(retain_hwhandler);
-	merge_num(detect_prio);
-	merge_num(detect_checker);
-	merge_num(deferred_remove);
-	merge_num(delay_watch_checks);
-	merge_num(delay_wait_checks);
-	merge_num(skip_kpartx);
-	merge_num(max_sectors_kb);
-	merge_num(ghost_delay);
-
-	snprintf(id, sizeof(id), "%s/%s", dst->vendor, dst->product);
-	reconcile_features_with_options(id, &dst->features,
-					&dst->no_path_retry,
-					&dst->retain_hwhandler);
-	return 0;
-}
-
 int
 store_hwe (vector hwtable, struct hwentry * dhwe)
 {
@@ -452,49 +397,33 @@ out:
 }
 
 static void
-factorize_hwtable (vector hw, int n)
+check_hwtable (vector hw, int n, const char *table_desc)
 {
 	struct hwentry *hwe1, *hwe2;
-	int i, j;
+	int j;
 
-restart:
-	vector_foreach_slot(hw, hwe1, i) {
-		if (i == n)
-			break;
-		j = n;
+	vector_foreach_slot_after(hw, hwe1, n) {
+		/* drop invalid device configs */
+		if (!hwe1->vendor || !hwe1->product) {
+			condlog(0, "device config in %s missing vendor or product parameter",
+				table_desc);
+			vector_del_slot(hw, n--);
+			free_hwe(hwe1);
+			continue;
+		}
+		j = n + 1;
 		vector_foreach_slot_after(hw, hwe2, j) {
-			/* drop invalid device configs */
-			if (!hwe2->vendor || !hwe2->product) {
-				condlog(0, "device config missing vendor or product parameter");
-				vector_del_slot(hw, j--);
-				free_hwe(hwe2);
-				continue;
-			}
-			if (hwe_regmatch(hwe1, hwe2->vendor,
-					 hwe2->product, hwe2->revision))
-				continue;
-			/* dup */
-			log_match(hwe1, hwe2->vendor,
-				  hwe2->product, hwe2->revision);
-			merge_hwe(hwe2, hwe1);
 			if (hwe_strmatch(hwe2, hwe1) == 0) {
-				condlog(4, "%s: removing hwentry %s:%s:%s",
+				condlog(1, "%s: duplicate device section for %s:%s:%s in %s",
 					__func__, hwe1->vendor, hwe1->product,
-					hwe1->revision);
-				vector_del_slot(hw, i);
-				free_hwe(hwe1);
-				n -= 1;
-				/*
-				 * Play safe here; we have modified
-				 * the original vector so the outer
-				 * vector_foreach_slot() might
-				 * become confused.
-				 */
-				goto restart;
+					hwe1->revision, table_desc);
 			}
+			else if (hwe_regmatch(hwe1, hwe2->vendor, hwe2->product,
+					      hwe2->revision) == 0)
+				log_match(hwe1, hwe2->vendor,
+					  hwe2->product, hwe2->revision);
 		}
 	}
-	return;
 }
 
 struct config *
@@ -604,9 +533,8 @@ process_config_dir(struct config *conf, vector keywords, char *dir)
 		snprintf(path, LINE_MAX, "%s/%s", dir, namelist[i]->d_name);
 		path[LINE_MAX-1] = '\0';
 		process_file(conf, path);
-		if (VECTOR_SIZE(conf->hwtable) > old_hwtable_size)
-			factorize_hwtable(conf->hwtable, old_hwtable_size);
-
+		check_hwtable(conf->hwtable, old_hwtable_size,
+			      namelist[i]->d_name);
 	}
 }
 
@@ -653,6 +581,9 @@ load_config (char * file)
 	if (setup_default_hwtable(conf->hwtable))
 		goto out;
 
+#ifdef CHECK_BUILTIN_HWTABLE
+	check_hwtable(conf->hwtable, 0, "builtin");
+#endif
 	/*
 	 * read the config file
 	 */
@@ -666,14 +597,7 @@ load_config (char * file)
 			condlog(0, "error parsing config file");
 			goto out;
 		}
-		if (VECTOR_SIZE(conf->hwtable) > builtin_hwtable_size) {
-			/*
-			 * remove duplica in hwtable. config file
-			 * takes precedence over build-in hwtable
-			 */
-			factorize_hwtable(conf->hwtable, builtin_hwtable_size);
-		}
-
+		check_hwtable(conf->hwtable, builtin_hwtable_size, file);
 	}
 
 	conf->processed_main_config = 1;
