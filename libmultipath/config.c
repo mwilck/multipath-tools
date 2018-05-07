@@ -103,26 +103,33 @@ out:
 	return retval;
 }
 
-struct hwentry *
+int
 find_hwe (const struct _vector *hwtable,
-	  const char * vendor, const char * product, const char * revision)
+	  const char * vendor, const char * product, const char * revision,
+	  vector result)
 {
-	int i;
-	struct hwentry *tmp, *ret = NULL;
+	int i, n = 0;
+	struct hwentry *tmp;
 
 	/*
-	 * Search backwards here.
+	 * Search backwards here, and add forward.
 	 * User modified entries are attached at the end of
 	 * the list, so we have to check them first before
 	 * continuing to the generic entries
 	 */
+	vector_reset(result);
 	vector_foreach_slot_backwards (hwtable, tmp, i) {
 		if (hwe_regmatch(tmp, vendor, product, revision))
 			continue;
-		ret = tmp;
+		if (vector_alloc_slot(result) != NULL) {
+			vector_set_slot(result, tmp);
+			n++;
+		}
 		break;
 	}
-	return ret;
+	condlog(n > 1 ? 2 : 3, "%s: found %d hwtable matches for %s:%s:%s",
+		__func__, n, vendor, product, revision);
+	return n;
 }
 
 struct mpentry *find_mpe(vector mptable, char *wwid)

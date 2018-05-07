@@ -256,7 +256,7 @@ struct path {
 	int io_err_pathfail_cnt;
 	int io_err_pathfail_starttime;
 	/* configlet pointers */
-	struct hwentry * hwe;
+	vector hwe;
 	struct gen_path generic_path;
 };
 
@@ -314,7 +314,7 @@ struct multipath {
 	char * features;
 	char * hwhandler;
 	struct mpentry * mpe;
-	struct hwentry * hwe;
+	vector hwe;
 
 	/* threads */
 	pthread_t waiter;
