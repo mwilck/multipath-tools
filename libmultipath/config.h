@@ -210,6 +210,9 @@ struct config {
 	vector elist_wwid;
 	vector elist_device;
 	vector elist_property;
+
+	int builtin_hwtable_size;
+	int builtin_blist_device_size;
 };
 
 extern struct udev * udev;

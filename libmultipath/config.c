@@ -578,26 +578,47 @@ load_config (char * file)
 	conf->hwtable = vector_alloc();
 	if (!conf->hwtable)
 			goto out;
+
+	conf->blist_devnode = vector_alloc();
+	conf->blist_wwid = vector_alloc();
+	conf->blist_device = vector_alloc();
+	conf->blist_property = vector_alloc();
+	if (!conf->blist_devnode || !conf->blist_wwid ||
+	    !conf->blist_device || !conf->blist_property)
+		goto out;
+
+	conf->elist_devnode = vector_alloc();
+	conf->elist_wwid = vector_alloc();
+	conf->elist_device = vector_alloc();
+	conf->elist_property = vector_alloc();
+	if (!conf->elist_devnode || !conf->elist_wwid ||
+	    !conf->elist_device || !conf->elist_property)
+		goto out;
+
 	if (setup_default_hwtable(conf->hwtable))
 		goto out;
+	conf->builtin_hwtable_size = VECTOR_SIZE(conf->hwtable);
 
 #ifdef CHECK_BUILTIN_HWTABLE
 	check_hwtable(conf->hwtable, 0, "builtin");
 #endif
+
+	if (setup_default_blist(conf))
+		goto out;
+	conf->builtin_blist_device_size = VECTOR_SIZE(conf->blist_device);
+
 	/*
 	 * read the config file
 	 */
 	conf->keywords = vector_alloc();
 	init_keywords(conf->keywords);
 	if (filepresent(file)) {
-		int builtin_hwtable_size;
 
-		builtin_hwtable_size = VECTOR_SIZE(conf->hwtable);
 		if (process_file(conf, file)) {
 			condlog(0, "error parsing config file");
 			goto out;
 		}
-		check_hwtable(conf->hwtable, builtin_hwtable_size, file);
+		check_hwtable(conf->hwtable, conf->builtin_hwtable_size, file);
 	}
 
 	conf->processed_main_config = 1;
@@ -609,60 +630,13 @@ load_config (char * file)
 	/*
 	 * fill the voids left in the config file
 	 */
-	if (conf->max_checkint == 0)
+	if (conf->max_checkint == 0) {
 		conf->max_checkint = MAX_CHECKINT(conf->checkint);
-	if (conf->blist_devnode == NULL) {
-		conf->blist_devnode = vector_alloc();
-
 		if (!conf->blist_devnode)
 			goto out;
 	}
-	if (conf->blist_wwid == NULL) {
-		conf->blist_wwid = vector_alloc();
 
-		if (!conf->blist_wwid)
-			goto out;
-	}
-	if (conf->blist_device == NULL) {
-		conf->blist_device = vector_alloc();
-
-		if (!conf->blist_device)
-			goto out;
-	}
-	if (conf->blist_property == NULL) {
-		conf->blist_property = vector_alloc();
-
-		if (!conf->blist_property)
-			goto out;
-	}
-
-	if (conf->elist_devnode == NULL) {
-		conf->elist_devnode = vector_alloc();
-
-		if (!conf->elist_devnode)
-			goto out;
-	}
-	if (conf->elist_wwid == NULL) {
-		conf->elist_wwid = vector_alloc();
-
-		if (!conf->elist_wwid)
-			goto out;
-	}
-
-	if (conf->elist_device == NULL) {
-		conf->elist_device = vector_alloc();
-
-		if (!conf->elist_device)
-			goto out;
-	}
-
-	if (conf->elist_property == NULL) {
-		conf->elist_property = vector_alloc();
-
-		if (!conf->elist_property)
-			goto out;
-	}
-	if (setup_default_blist(conf))
+	if (setup_product_blist(conf, conf->builtin_hwtable_size))
 		goto out;
 
 	if (conf->mptable == NULL) {
