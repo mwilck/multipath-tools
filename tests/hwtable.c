@@ -1512,15 +1512,9 @@ static void test_product_blacklist_matching(void **state)
 	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value, "0");
 	free_path(pp);
 
-#if BROKEN == 1
-	condlog(1, "%s: WARNING: broken blacklist test on line %d",
-		__func__, __LINE__+1);
-	pp = mock_path(vnd_foo.value, prd_baz.value, "0");
-	free_path(pp);
-#else
 	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value, "0");
 	free_path(pp);
-#endif
+
 	pp = mock_path(vnd_foo.value, prd_bam.value, "0");
 	free_path(pp);
 
