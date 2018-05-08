@@ -1335,7 +1335,8 @@ snprint_multipath_topology_json (char * buff, int len, const struct vectors * ve
 }
 
 static int
-snprint_hwentry (struct config *conf, char * buff, int len, const struct hwentry * hwe)
+snprint_hwentry (const struct config *conf,
+		 char * buff, int len, const struct hwentry * hwe)
 {
 	int i;
 	int fwd = 0;
@@ -1367,7 +1368,8 @@ snprint_hwentry (struct config *conf, char * buff, int len, const struct hwentry
 	return fwd;
 }
 
-int snprint_hwtable(struct config *conf, char *buff, int len, vector hwtable)
+static int snprint_hwtable(const struct config *conf,
+			   char *buff, int len, vector hwtable)
 {
 	int fwd = 0;
 	int i;
@@ -1393,7 +1395,8 @@ int snprint_hwtable(struct config *conf, char *buff, int len, vector hwtable)
 }
 
 static int
-snprint_mpentry (struct config *conf, char * buff, int len, const struct mpentry * mpe)
+snprint_mpentry (const struct config *conf, char * buff, int len,
+		 const struct mpentry * mpe)
 {
 	int i;
 	int fwd = 0;
@@ -1419,7 +1422,8 @@ snprint_mpentry (struct config *conf, char * buff, int len, const struct mpentry
 	return fwd;
 }
 
-int snprint_mptable(struct config *conf, char *buff, int len, vector mptable)
+static int snprint_mptable(const struct config *conf,
+			   char *buff, int len, vector mptable)
 {
 	int fwd = 0;
 	int i;
@@ -1444,8 +1448,8 @@ int snprint_mptable(struct config *conf, char *buff, int len, vector mptable)
 	return fwd;
 }
 
-int snprint_overrides(struct config *conf, char * buff, int len,
-		      const struct hwentry *overrides)
+static int snprint_overrides(const struct config *conf, char * buff, int len,
+			     const struct hwentry *overrides)
 {
 	int fwd = 0;
 	int i;
@@ -1474,7 +1478,7 @@ out:
 	return fwd;
 }
 
-int snprint_defaults(struct config *conf, char *buff, int len)
+static int snprint_defaults(const struct config *conf, char *buff, int len)
 {
 	int fwd = 0;
 	int i;
@@ -1617,7 +1621,7 @@ int snprint_blacklist_report(struct config *conf, char *buff, int len)
 	return fwd;
 }
 
-int snprint_blacklist(struct config *conf, char *buff, int len)
+static int snprint_blacklist(const struct config *conf, char *buff, int len)
 {
 	int i;
 	struct blentry * ble;
@@ -1693,7 +1697,8 @@ int snprint_blacklist(struct config *conf, char *buff, int len)
 	return fwd;
 }
 
-int snprint_blacklist_except(struct config *conf, char *buff, int len)
+static int snprint_blacklist_except(const struct config *conf,
+				    char *buff, int len)
 {
 	int i;
 	struct blentry * ele;
@@ -1767,6 +1772,59 @@ int snprint_blacklist_except(struct config *conf, char *buff, int len)
 	if (fwd >= len)
 		return len;
 	return fwd;
+}
+
+char *snprint_config(const struct config *conf, int *len)
+{
+	char *reply;
+	/* built-in config is >20kB already */
+	unsigned int maxlen = 32768;
+
+        for (reply = NULL; maxlen <= UINT_MAX/2; maxlen *= 2) {
+		char *c, *tmp = reply;
+
+		reply = REALLOC(reply, maxlen);
+		if (!reply) {
+			if (tmp)
+				free(tmp);
+			return NULL;
+		}
+
+		c = reply + snprint_defaults(conf, reply, maxlen);
+		if ((c - reply) == maxlen)
+			continue;
+
+		c += snprint_blacklist(conf, c, reply + maxlen - c);
+		if ((c - reply) == maxlen)
+			continue;
+
+		c += snprint_blacklist_except(conf, c, reply + maxlen - c);
+		if ((c - reply) == maxlen)
+			continue;
+
+		c += snprint_hwtable(conf, c, reply + maxlen - c,
+				     conf->hwtable);
+		if ((c - reply) == maxlen)
+			continue;
+
+		c += snprint_overrides(conf, c, reply + maxlen - c,
+				       conf->overrides);
+		if ((c - reply) == maxlen)
+			continue;
+
+		if (VECTOR_SIZE(conf->mptable) > 0)
+			c += snprint_mptable(conf, c, reply + maxlen - c,
+					     conf->mptable);
+
+		if ((c - reply) < maxlen) {
+			if (len)
+				*len = c - reply;
+			return reply;
+		}
+	}
+
+	free(reply);
+	return NULL;
 }
 
 int snprint_status(char *buff, int len, const struct vectors *vecs)
