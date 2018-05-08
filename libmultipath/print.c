@@ -1369,10 +1369,9 @@ snprint_hwentry (const struct config *conf,
 }
 
 static int snprint_hwtable(const struct config *conf,
-			   char *buff, int len, vector hwtable)
+			   char *buff, int len, vector hwtable, int i)
 {
 	int fwd = 0;
-	int i;
 	struct hwentry * hwe;
 	struct keyword * rootkw;
 
@@ -1383,7 +1382,7 @@ static int snprint_hwtable(const struct config *conf,
 	fwd += snprintf(buff + fwd, len - fwd, "devices {\n");
 	if (fwd >= len)
 		return len;
-	vector_foreach_slot (hwtable, hwe, i) {
+	vector_foreach_slot_after (hwtable, hwe, i) {
 		fwd += snprint_hwentry(conf, buff + fwd, len - fwd, hwe);
 		if (fwd >= len)
 			return len;
@@ -1621,7 +1620,8 @@ int snprint_blacklist_report(struct config *conf, char *buff, int len)
 	return fwd;
 }
 
-static int snprint_blacklist(const struct config *conf, char *buff, int len)
+static int snprint_blacklist(const struct config *conf, char *buff, int len,
+			     bool user)
 {
 	int i;
 	struct blentry * ble;
@@ -1669,7 +1669,8 @@ static int snprint_blacklist(const struct config *conf, char *buff, int len)
 	if (!rootkw)
 		return 0;
 
-	vector_foreach_slot (conf->blist_device, bled, i) {
+	i = user ? conf->builtin_blist_device_size : 0;
+	vector_foreach_slot_after (conf->blist_device, bled, i) {
 		fwd += snprintf(buff + fwd, len - fwd, "\tdevice {\n");
 		if (fwd >= len)
 			return len;
@@ -1774,7 +1775,7 @@ static int snprint_blacklist_except(const struct config *conf,
 	return fwd;
 }
 
-char *snprint_config(const struct config *conf, int *len)
+char *snprint_config(const struct config *conf, int *len, bool user)
 {
 	char *reply;
 	/* built-in config is >20kB already */
@@ -1794,7 +1795,7 @@ char *snprint_config(const struct config *conf, int *len)
 		if ((c - reply) == maxlen)
 			continue;
 
-		c += snprint_blacklist(conf, c, reply + maxlen - c);
+		c += snprint_blacklist(conf, c, reply + maxlen - c, user);
 		if ((c - reply) == maxlen)
 			continue;
 
@@ -1803,7 +1804,8 @@ char *snprint_config(const struct config *conf, int *len)
 			continue;
 
 		c += snprint_hwtable(conf, c, reply + maxlen - c,
-				     conf->hwtable);
+				     conf->hwtable,
+				     user ? conf->builtin_hwtable_size : 0);
 		if ((c - reply) == maxlen)
 			continue;
 
