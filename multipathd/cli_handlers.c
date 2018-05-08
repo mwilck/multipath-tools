@@ -246,14 +246,14 @@ show_map_json (char ** r, int * len, struct multipath * mpp,
 }
 
 int
-show_config (char ** r, int * len)
+show_config (char ** r, int * len, bool user)
 {
 	struct config *conf;
 	char *reply;
 
 	conf = get_multipath_config();
 	pthread_cleanup_push(put_multipath_config, conf);
-	reply = snprint_config(conf, len);
+	reply = snprint_config(conf, len, user);
 	pthread_cleanup_pop(1);
 	if (reply == NULL)
 		return 1;
@@ -277,7 +277,15 @@ cli_list_config (void * v, char ** reply, int * len, void * data)
 {
 	condlog(3, "list config (operator)");
 
-	return show_config(reply, len);
+	return show_config(reply, len, false);
+}
+
+int
+cli_list_config_user (void * v, char ** reply, int * len, void * data)
+{
+	condlog(3, "list config user (operator)");
+
+	return show_config(reply, len, true);
 }
 
 int

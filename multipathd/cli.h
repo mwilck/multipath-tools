@@ -44,6 +44,7 @@ enum {
 	__SETPRKEY,
 	__UNSETPRKEY,
 	__KEY,
+	__USER,
 };
 
 #define LIST		(1 << __LIST)
@@ -87,6 +88,7 @@ enum {
 #define SETPRKEY	(1ULL << __SETPRKEY)
 #define UNSETPRKEY	(1ULL << __UNSETPRKEY)
 #define KEY		(1ULL << __KEY)
+#define USER		(1ULL << __USER)
 
 #define INITIAL_REPLY_LEN	1200
 
