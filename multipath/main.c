@@ -107,7 +107,7 @@ usage (char * progname)
 	fprintf (stderr, "  %s [-a|-c|-w|-W] [-d] [-r] [-i] [-v lvl] [-p pol] [-b fil] [-q] [dev]\n", progname);
 	fprintf (stderr, "  %s -l|-ll|-f [-v lvl] [-b fil] [-R num] [dev]\n", progname);
 	fprintf (stderr, "  %s -F [-v lvl] [-R num]\n", progname);
-	fprintf (stderr, "  %s -t\n", progname);
+	fprintf (stderr, "  %s [-t|-T]\n", progname);
 	fprintf (stderr, "  %s -h\n", progname);
 	fprintf (stderr,
 		"\n"
@@ -123,6 +123,7 @@ usage (char * progname)
 		"  -q      allow queue_if_no_path when multipathd is not running\n"
 		"  -d      dry run, do not create or update devmaps\n"
 		"  -t      display the currently used multipathd configuration\n"
+		"  -T      display the multipathd configuration without builtin defaults\n"
 		"  -r      force devmap reload\n"
 		"  -i      ignore wwids file\n"
 		"  -B      treat the bindings file as read only\n"
@@ -516,9 +517,9 @@ out:
 }
 
 static int
-dump_config (struct config *conf)
+dump_config (struct config *conf, bool user)
 {
-	char * reply = snprint_config(conf, NULL);
+	char * reply = snprint_config(conf, NULL, user);
 
 	if (reply != NULL) {
 		printf("%s", reply);
@@ -623,7 +624,7 @@ main (int argc, char *argv[])
 		exit(1);
 	multipath_conf = conf;
 	conf->retrigger_tries = 0;
-	while ((arg = getopt(argc, argv, ":adcChl::FfM:v:p:b:BrR:itquUwW")) != EOF ) {
+	while ((arg = getopt(argc, argv, ":adcChl::FfM:v:p:b:BrR:itTquUwW")) != EOF ) {
 		switch(arg) {
 		case 1: printf("optarg : %s\n",optarg);
 			break;
@@ -688,7 +689,10 @@ main (int argc, char *argv[])
 			conf->ignore_wwids = 1;
 			break;
 		case 't':
-			r = dump_config(conf);
+			r = dump_config(conf, false);
+			goto out_free_config;
+		case 'T':
+			r = dump_config(conf, true);
 			goto out_free_config;
 		case 'h':
 			usage(argv[0]);
@@ -768,7 +772,7 @@ main (int argc, char *argv[])
 		fd_limit.rlim_cur = conf->max_fds;
 		fd_limit.rlim_max = conf->max_fds;
 		if (setrlimit(RLIMIT_NOFILE, &fd_limit) < 0)
-			condlog(0, "can't set open fds limit to %d : %s",
+			condlog(0, "ca'nt set open fds limit to %d : %s",
 				conf->max_fds, strerror(errno));
 	}
 
