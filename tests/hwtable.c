@@ -344,10 +344,12 @@ static const char _prio[] = "prio";
 static const char _checker[] = "path_checker";
 static const char _getuid[] = "getuid_callout";
 static const char _uid_attr[] = "uid_attribute";
+static const char _bl_product[] = "product_blacklist";
 
 /* Device identifiers */
 static const struct key_value vnd_foo = { _vendor, "foo" };
 static const struct key_value prd_bar = { _product, "bar" };
+static const struct key_value prd_bam = { _product, "bam" };
 static const struct key_value prd_barz = { _product, "barz" };
 static const struct key_value vnd_boo = { _vendor, "boo" };
 static const struct key_value prd_baz = { _product, "baz" };
@@ -369,6 +371,10 @@ static const struct key_value prio_rdac = { _prio, "rdac" };
 static const struct key_value chk_hp = { _checker, "hp_sw" };
 static const struct key_value gui_foo = { _getuid, "/tmp/foo" };
 static const struct key_value uid_baz = { _uid_attr, "BAZ_ATTR" };
+static const struct key_value bl_bar = { _bl_product, "bar" };
+static const struct key_value bl_baz = { _bl_product, "baz" };
+static const struct key_value bl_barx = { _bl_product, "ba[[rxy]" };
+static const struct key_value bl_bazy = { _bl_product, "ba[zy]" };
 
 /*
  * Helper wrappers for mock_path().
@@ -471,26 +477,11 @@ ssize_t __wrap_sysfs_attr_get_value(struct udev_device *dev,
 	return strlen(value);
 }
 
-/*
- * Pretent we detected a SCSI device with given vendor/prod/rev
- */
-static struct path *mock_path(const char *vendor, const char *prod)
+static void mock_scsi_sysfs_pathinfo(const char *vendor, const char *prod,
+				     const char *rev)
 {
 	const char hbtl[] = "4:0:3:1";
-	const char rev[] = "0";
-	struct path *pp;
-	struct config *conf;
 
-	pp = alloc_path();
-	assert_ptr_not_equal(pp, NULL);
-
-	pp->udev = (void *)pp; /* fake non-NULL udev */
-	pp->detect_prio = DETECT_PRIO_OFF;
-	pp->detect_checker = DETECT_CHECKER_OFF;
-	strlcpy(pp->dev, "sdTEST", sizeof(pp->dev));
-	strlcpy(pp->wwid, "TEST-WWID", sizeof(pp->wwid));
-
-	/* scsi_sysfs_pathinfo */
 	will_return(__wrap_udev_device_get_subsystem, "scsi");
 	will_return(__wrap_udev_device_get_sysname, hbtl);
 	will_return(__wrap_udev_device_get_sysname, hbtl);
@@ -508,13 +499,44 @@ static struct path *mock_path(const char *vendor, const char *prod)
 	will_return(__wrap_udev_device_get_sysname, "noiscsi");
 	will_return(__wrap_udev_device_get_parent, NULL);
 	will_return(__wrap_udev_device_get_sysname, "ata25");
+}
+
+/*
+ * Pretend we detected a SCSI device with given vendor/prod/rev
+ */
+static struct path *_mock_path(const char *vendor, const char *prod,
+			       const char *rev, bool blacklisted)
+{
+	struct path *pp;
+	struct config *conf;
+
+	pp = alloc_path();
+	assert_ptr_not_equal(pp, NULL);
+
+	pp->udev = (void *)pp; /* fake non-NULL udev */
+	pp->detect_prio = DETECT_PRIO_OFF;
+	pp->detect_checker = DETECT_CHECKER_OFF;
+	strlcpy(pp->dev, "sdTEST", sizeof(pp->dev));
+	strlcpy(pp->wwid, "TEST-WWID", sizeof(pp->wwid));
+
+	mock_scsi_sysfs_pathinfo(vendor, prod, rev);
+
+	if (blacklisted) {
+		conf = get_multipath_config();
+		assert_int_equal(pathinfo(pp, conf,
+					  DI_SYSFS|DI_NOIO|DI_BLACKLIST),
+				 PATHINFO_SKIPPED);
+		put_multipath_config(conf);
+		return pp;
+	}
 
 	/* path_offline */
 	will_return(__wrap_udev_device_get_subsystem, "scsi");
 	will_return(__wrap_sysfs_attr_get_value, "running");
 
 	conf = get_multipath_config();
-	assert_int_equal(pathinfo(pp, conf, DI_SYSFS|DI_NOIO), PATHINFO_OK);
+	assert_int_equal(pathinfo(pp, conf, DI_SYSFS|DI_NOIO|DI_BLACKLIST),
+			 PATHINFO_OK);
 	select_prio(conf, pp);
 	select_getuid(conf, pp);
 
@@ -526,6 +548,9 @@ static struct path *mock_path(const char *vendor, const char *prod)
 
 	return pp;
 }
+
+#define mock_path(v, p) _mock_path((v), (p), "0", false)
+#define mock_path_blacklisted(v, p) _mock_path((v), (p), "0", true)
 
 static struct multipath *mock_multipath(struct path *pp)
 {
@@ -1360,6 +1385,197 @@ static void test_2_nonmatching_res_hwe_dir(void **state)
 	FREE_CONFIG(_conf);
 }
 
+/*
+ * Simple blacklist test.
+ */
+static void test_blacklist(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	const struct key_value kv1[] = { vnd_foo, prd_bar };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "blacklist");
+	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	free_path(pp);
+
+	pp = mock_path(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Simple blacklist test with regex and exception
+ */
+static void test_blacklist_regex(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	const struct key_value kv1[] = { vnd_foo, prd_ba_s };
+	const struct key_value kv2[] = { vnd_foo, prd_bar };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "blacklist");
+	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
+	end_section_all(hwt);
+	begin_section_all(hwt, "blacklist_exceptions");
+	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path(vnd_foo.value, prd_bar.value);
+	free_path(pp);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+
+	pp = mock_path(vnd_foo.value, prd_bam.value);
+	free_path(pp);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Simple blacklist test with regex and exception
+ * config file order inverted wrt test_blacklist_regex
+ */
+static void test_blacklist_regex_inv(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	const struct key_value kv1[] = { vnd_foo, prd_ba_s };
+	const struct key_value kv2[] = { vnd_foo, prd_bar };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "blacklist");
+	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv1), kv1);
+	end_section_all(hwt);
+	begin_section_all(hwt, "blacklist_exceptions");
+	write_device(hwt->config_file, ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path(vnd_foo.value, prd_bar.value);
+	free_path(pp);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+
+	pp = mock_path(vnd_foo.value, prd_bam.value);
+	free_path(pp);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Simple blacklist test with regex and exception
+ * config file order inverted wrt test_blacklist_regex
+ */
+static void test_blacklist_regex_matching(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	const struct key_value kv1[] = { vnd_foo, prd_barx };
+	const struct key_value kv2[] = { vnd_foo, prd_bazy };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "blacklist");
+	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
+	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	free_path(pp);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+
+	pp = mock_path(vnd_foo.value, prd_bam.value);
+	free_path(pp);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Test for product_blacklist. Two entries blacklisting each other.
+ *
+ * Expected: Both are blacklisted.
+ */
+static void test_product_blacklist(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_baz };
+	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bar };
+
+	hwt = CHECK_STATE(state);
+	WRITE_TWO_DEVICES(hwt, kv1, kv2);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	free_path(pp);
+
+	pp = mock_path(vnd_foo.value, prd_bam.value);
+	free_path(pp);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Test for product_blacklist. The second regex "matches" the first.
+ * This is a pathological example.
+ *
+ * Expected: "foo:bar", "foo:baz" are blacklisted.
+ *
+ * Current: "foo:baz" is not blacklisted, because the two regexes are
+ * merged into one.
+ */
+static void test_product_blacklist_matching(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_barx };
+	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bazy };
+
+	hwt = CHECK_STATE(state);
+	WRITE_TWO_DEVICES(hwt, kv1, kv2);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	free_path(pp);
+
+#if BROKEN == 1
+	condlog(1, "%s: WARNING: broken blacklist test on line %d",
+		__func__, __LINE__+1);
+	pp = mock_path(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+#else
+	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	free_path(pp);
+#endif
+	pp = mock_path(vnd_foo.value, prd_bam.value);
+	free_path(pp);
+
+	FREE_CONFIG(_conf);
+}
+
 static int test_hwtable(void)
 {
 	const struct CMUnitTest tests[] = {
@@ -1381,6 +1597,12 @@ static int test_hwtable(void)
 		cmocka_unit_test(test_2_ident_not_self_matching_re_hwe_dir),
 		cmocka_unit_test(test_2_matching_res_hwe_dir),
 		cmocka_unit_test(test_2_nonmatching_res_hwe_dir),
+		cmocka_unit_test(test_blacklist),
+		cmocka_unit_test(test_blacklist_regex),
+		cmocka_unit_test(test_blacklist_regex_inv),
+		cmocka_unit_test(test_blacklist_regex_matching),
+		cmocka_unit_test(test_product_blacklist),
+		cmocka_unit_test(test_product_blacklist_matching),
 	};
 
 	return cmocka_run_group_tests(tests, setup, teardown);
