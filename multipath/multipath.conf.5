@@ -1229,26 +1229,39 @@ are taken from the \fIdefaults\fR or \fIdevices\fR section:
 .SH "devices section"
 .\" ----------------------------------------------------------------------------
 .
+\fImultipath-tools\fR have a built-in device table with reasonable defaults
+for more than 100 known multipath-capable storage devices. The devices section
+can be used to override these settings. If there are multiple matches for a
+given device, the attributes of all matching entries are applied to it.
+If an attribute is specified in several matching device subsections,
+later entries take precedence. Thus, entries in files under \fIconfig_dir\fR (in
+reverse alphabetical order) have the highest precedence, followed by entries
+in \fImultipath.conf\fR; the built-in hardware table has the lowest
+precedence. Inside a configuration file, later entries have higher precedence
+than earlier ones. 
+.LP
 The only recognized attribute for the \fIdevices\fR section is the \fIdevice\fR
-subsection.
+subsection. Devices detected in the system are matched against the device entries
+using the \fBvendor\fR, \fBproduct\fR, and \fBrevision\fR fields, which are
+all POSIX Extended regular expressions (see \fBregex\fR(7)). 
 .LP
 .
-.
 The \fIdevice\fR subsection recognizes the following attributes:
-.TP
-vendor, product, revision and product_blacklist are POSIX Extended regex.
 .TP 17
 .B vendor
-(Mandatory) Vendor identifier.
+(Mandatory) Regular expression to match the vendor name.
 .TP
 .B product
-(Mandatory) Product identifier.
+(Mandatory) Regular expression to match the product name.
 .TP
 .B revision
-Revision identfier.
+Regular expression to match the product revision. If not specified, any
+revision matches.
 .TP
 .B product_blacklist
-Product strings to blacklist for this vendor.
+Products with the given \fBvendor\fR matching this string are
+blacklisted. This is equivalent to a \fBdevice\fR entry in the \fIblacklist\fR
+section.
 .TP
 .B alias_prefix
 The user_friendly_names prefix to use for this
