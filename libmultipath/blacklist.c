@@ -182,13 +182,40 @@ find_blacklist_device (const struct _vector *blist, const char * vendor,
 	return 0;
 }
 
+int setup_product_blist(struct config *conf, int n)
+{
+	struct hwentry *hwe;
+	struct blentry *ble;
+
+	vector_foreach_slot_after (conf->hwtable, hwe, n) {
+		if (!hwe->bl_product)
+			continue;
+		if (find_blacklist_device(conf->blist_device,
+					  hwe->vendor, hwe->bl_product))
+			continue;
+		if (alloc_ble_device(conf->blist_device))
+			return 1;
+		ble = VECTOR_SLOT(conf->blist_device,
+				  VECTOR_SIZE(conf->blist_device) - 1);
+		if (set_ble_device(conf->blist_device,
+				   STRDUP(hwe->vendor),
+				   STRDUP(hwe->bl_product),
+				   ORIGIN_DEFAULT)) {
+			FREE(ble);
+			vector_del_slot(
+				conf->blist_device,
+				VECTOR_SIZE(conf->blist_device) - 1);
+			condlog(1, "%s: bad regex: %s:%s",
+				__func__, hwe->vendor, hwe->product);
+		}
+	}
+	return 0;
+}
+
 int
 setup_default_blist (struct config * conf)
 {
-	struct blentry * ble;
-	struct hwentry *hwe;
 	char * str;
-	int i;
 
 	str = STRDUP("^(ram|raw|loop|fd|md|dm-|sr|scd|st|dcssblk)[0-9]");
 	if (!str)
@@ -207,27 +234,7 @@ setup_default_blist (struct config * conf)
 		return 1;
 	if (store_ble(conf->elist_property, str, ORIGIN_DEFAULT))
 		return 1;
-
-	vector_foreach_slot (conf->hwtable, hwe, i) {
-		if (hwe->bl_product) {
-			if (find_blacklist_device(conf->blist_device,
-						  hwe->vendor, hwe->bl_product))
-				continue;
-			if (alloc_ble_device(conf->blist_device))
-				return 1;
-			ble = VECTOR_SLOT(conf->blist_device,
-					  VECTOR_SIZE(conf->blist_device) - 1);
-			if (set_ble_device(conf->blist_device,
-					   STRDUP(hwe->vendor),
-					   STRDUP(hwe->bl_product),
-					   ORIGIN_DEFAULT)) {
-				FREE(ble);
-				vector_del_slot(conf->blist_device, VECTOR_SIZE(conf->blist_device) - 1);
-				return 1;
-			}
-		}
-	}
-	return 0;
+	return setup_product_blist(conf, 0);
 }
 
 #define LOG_BLIST(M,S)							\

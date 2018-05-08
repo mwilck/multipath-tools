@@ -29,6 +29,7 @@ struct blentry_device {
 	int origin;
 };
 
+int setup_product_blist(struct config *, int);
 int setup_default_blist (struct config *);
 int alloc_ble_device (vector);
 int filter_devnode (vector, vector, char *);
