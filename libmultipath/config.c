@@ -452,7 +452,7 @@ out:
 }
 
 static void
-factorize_hwtable (vector hw, int n)
+factorize_hwtable (vector hw, int n, const char *table_desc)
 {
 	struct hwentry *hwe1, *hwe2;
 	int i, j;
@@ -476,11 +476,12 @@ restart:
 				condlog(i >= n ? 1 : 3,
 					"%s: duplicate device section for %s:%s:%s in %s",
 					__func__, hwe1->vendor, hwe1->product,
-					hwe1->revision);
+					hwe1->revision, table_desc);
 				vector_del_slot(hw, i);
 				merge_hwe(hwe2, hwe1);
 				free_hwe(hwe1);
-				n -= 1;
+				if (i < n)
+					n -= 1;
 				/*
 				 * Play safe here; we have modified
 				 * the original vector so the outer
@@ -601,8 +602,8 @@ process_config_dir(struct config *conf, vector keywords, char *dir)
 		snprintf(path, LINE_MAX, "%s/%s", dir, namelist[i]->d_name);
 		path[LINE_MAX-1] = '\0';
 		process_file(conf, path);
-		check_hwtable(conf->hwtable, old_hwtable_size,
-			      namelist[i]->d_name);
+		factorize_hwtable(conf->hwtable, old_hwtable_size,
+				  namelist[i]->d_name);
 	}
 }
 
@@ -650,7 +651,7 @@ load_config (char * file)
 		goto out;
 
 #ifdef CHECK_BUILTIN_HWTABLE
-	check_hwtable(conf->hwtable, 0, "builtin");
+	factorize_hwtable(conf->hwtable, 0, "builtin");
 #endif
 	/*
 	 * read the config file
@@ -665,7 +666,7 @@ load_config (char * file)
 			condlog(0, "error parsing config file");
 			goto out;
 		}
-		check_hwtable(conf->hwtable, builtin_hwtable_size, file);
+		factorize_hwtable(conf->hwtable, builtin_hwtable_size, file);
 	}
 
 	conf->processed_main_config = 1;
