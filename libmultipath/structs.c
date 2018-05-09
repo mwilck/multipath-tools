@@ -359,7 +359,7 @@ store_adaptergroup(vector adapters, struct adapter_group * agp)
 }
 
 struct multipath *
-find_mp_by_minor (vector mpvec, int minor)
+find_mp_by_minor (const struct _vector *mpvec, int minor)
 {
 	int i;
 	struct multipath * mpp;
@@ -378,7 +378,7 @@ find_mp_by_minor (vector mpvec, int minor)
 }
 
 struct multipath *
-find_mp_by_wwid (vector mpvec, char * wwid)
+find_mp_by_wwid (const struct _vector *mpvec, const char * wwid)
 {
 	int i;
 	struct multipath * mpp;
@@ -394,7 +394,7 @@ find_mp_by_wwid (vector mpvec, char * wwid)
 }
 
 struct multipath *
-find_mp_by_alias (vector mpvec, const char * alias)
+find_mp_by_alias (const struct _vector *mpvec, const char * alias)
 {
 	int i;
 	int len;
@@ -417,7 +417,7 @@ find_mp_by_alias (vector mpvec, const char * alias)
 }
 
 struct multipath *
-find_mp_by_str (vector mpvec, char * str)
+find_mp_by_str (const struct _vector *mpvec, const char * str)
 {
 	int minor;
 
@@ -428,7 +428,7 @@ find_mp_by_str (vector mpvec, char * str)
 }
 
 struct path *
-find_path_by_dev (vector pathvec, const char * dev)
+find_path_by_dev (const struct _vector *pathvec, const char * dev)
 {
 	int i;
 	struct path * pp;
@@ -445,7 +445,7 @@ find_path_by_dev (vector pathvec, const char * dev)
 }
 
 struct path *
-find_path_by_devt (vector pathvec, const char * dev_t)
+find_path_by_devt (const struct _vector *pathvec, const char * dev_t)
 {
 	int i;
 	struct path * pp;
@@ -461,7 +461,7 @@ find_path_by_devt (vector pathvec, const char * dev_t)
 	return NULL;
 }
 
-int pathcountgr(struct pathgroup *pgp, int state)
+int pathcountgr(const struct pathgroup *pgp, int state)
 {
 	struct path *pp;
 	int count = 0;
@@ -474,7 +474,7 @@ int pathcountgr(struct pathgroup *pgp, int state)
 	return count;
 }
 
-int pathcount(struct multipath *mpp, int state)
+int pathcount(const struct multipath *mpp, int state)
 {
 	struct pathgroup *pgp;
 	int count = 0;
@@ -487,7 +487,7 @@ int pathcount(struct multipath *mpp, int state)
 	return count;
 }
 
-int pathcmp(struct pathgroup *pgp, struct pathgroup *cpgp)
+int pathcmp(const struct pathgroup *pgp, const struct pathgroup *cpgp)
 {
 	int i, j;
 	struct path *pp, *cpp;
@@ -507,7 +507,7 @@ int pathcmp(struct pathgroup *pgp, struct pathgroup *cpgp)
 }
 
 struct path *
-first_path (struct multipath * mpp)
+first_path (const struct multipath * mpp)
 {
 	struct pathgroup * pgp;
 	if (!mpp->pg)
