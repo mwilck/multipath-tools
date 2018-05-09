@@ -1421,6 +1421,15 @@ snprint_mpentry (const struct config *conf, char * buff, int len,
 		if (fwd >= len)
 			return len;
 	}
+	/*
+	 * This mpp doesn't have alias defined. Add the alias in a comment.
+	 */
+	if (mpp != NULL && strcmp(mpp->alias, mpp->wwid)) {
+		fwd += snprintf(buff + fwd, len - fwd, "\t\t# alias \"%s\"\n",
+				mpp->alias);
+		if (fwd >= len)
+			return len;
+	}
 	fwd += snprintf(buff + fwd, len - fwd, "\t}\n");
 	if (fwd >= len)
 		return len;
