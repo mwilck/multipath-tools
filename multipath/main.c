@@ -755,7 +755,7 @@ out:
 static int
 dump_config (struct config *conf)
 {
-	char * reply = snprint_config(conf, NULL, NULL);
+	char * reply = snprint_config(conf, NULL, NULL, NULL);
 
 	if (reply != NULL) {
 		printf("%s", reply);
