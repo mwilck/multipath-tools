@@ -206,3 +206,15 @@ vector_assign_slot(vector v, int i, void *value)
 
 	v->slot[i] = value;
 }
+
+int vector_find_or_add_slot(vector v, void *value)
+{
+	int n = find_slot(v, value);
+
+	if (n >= 0)
+		return n;
+	if (vector_alloc_slot(v) == NULL)
+		return -1;
+	vector_set_slot(v, value);
+	return VECTOR_SIZE(v) - 1;
+}
