@@ -24,6 +24,7 @@
 #include "propsel.h"
 #include "defaults.h"
 #include "pgpolicies.h"
+#include "print.h"
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
 #define N_CONF_FILES 2
@@ -597,6 +598,40 @@ out_free:
 
 /***** BEGIN TESTS SECTION *****/
 
+static struct config *check_config(struct config *conf,
+				   const struct hwt_state *hwt)
+{
+	char *cfg1, *cfg2;
+#ifdef DBG_CONFIG
+	FILE *tmp;
+#endif	
+	cfg1 = snprint_config(conf, NULL, NULL, NULL);
+	assert_ptr_not_equal(cfg1, NULL);
+	reset_configs(hwt);
+	fprintf(hwt->config_file, "%s", cfg1);
+	fflush(hwt->config_file);
+	FREE_CONFIG(conf);
+
+	conf = LOAD_CONFIG(hwt);
+	cfg2 = snprint_config(conf, NULL, NULL, NULL);
+#ifdef DBG_CONFIG
+	tmp = fopen("/tmp/cfg1.txt", "w");
+	fprintf(tmp, "%s", cfg1);
+	fclose(tmp);
+	tmp = fopen("/tmp/cfg2.txt", "w");
+	fprintf(tmp, "%s", cfg2);
+	fclose(tmp);
+#endif
+	assert_ptr_not_equal(cfg2, NULL);
+	assert_int_equal(strlen(cfg2), strlen(cfg1));
+	assert_string_equal(cfg2, cfg1);
+
+	free(cfg1);
+	free(cfg2);
+
+	return conf;
+}
+
 /*
  * Sanity check for the test itself, because defaults may be changed
  * in libmultipath.
@@ -655,6 +690,7 @@ static void test_internal_nvme(void **state)
 	assert_int_equal(mp->retain_hwhandler, RETAIN_HWHANDLER_OFF);
 	free_multipath(mp, FREE_PATHS);
 
+	_conf = check_config(_conf, hwt);
 	FREE_CONFIG(_conf);
 }
 
