@@ -23,6 +23,7 @@
 #include "defaults.h"
 #include "pgpolicies.h"
 #include "test-lib.h"
+#include "print.h"
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
 #define N_CONF_FILES 2
@@ -358,6 +359,16 @@ static void write_device(FILE *ff, int nkv, const struct key_value *kv)
 		conf = NULL;			\
 	} while (0)
 
+static void replace_config(const struct hwt_state *hwt,
+			   const char *conf_str)
+{
+	FREE_CONFIG(_conf);
+	reset_configs(hwt);
+	fprintf(hwt->config_file, "%s", conf_str);
+	fflush(hwt->config_file);
+	_conf = LOAD_CONFIG(hwt);
+}
+
 #define TEST_PROP(prop, val) do {				\
 		if (val == NULL)				\
 			assert_ptr_equal(prop, NULL);		\
@@ -432,8 +443,56 @@ static const struct key_value npr_queue = { _no_path_retry, "queue" };
 /***** BEGIN TESTS SECTION *****/
 
 /*
- * Run the given test case. This will later be extended
- * to run the test several times in a row.
+ * Dump the configuration, subistitute the dumped configuration
+ * for the current one, and verify that the result is identical.
+ */
+static void replicate_config(const struct hwt_state *hwt)
+{
+	char *cfg1, *cfg2;
+	struct config *conf;
+
+	condlog(1, "--- %s: replicating configuration", __func__);
+
+	conf = get_multipath_config();
+	cfg1 = snprint_config(conf, NULL);
+
+	assert_non_null(cfg1);
+	put_multipath_config(conf);
+
+	replace_config(hwt, cfg1);
+
+	conf = get_multipath_config();
+	cfg2 = snprint_config(conf, NULL);
+	assert_non_null(cfg2);
+	put_multipath_config(conf);
+
+// #define DBG_CONFIG 1
+#ifdef DBG_CONFIG
+#define DUMP_CFG_STR(x) do {						\
+		FILE *tmp = fopen("/tmp/hwtable-" #x ".txt", "w");	\
+		fprintf(tmp, "%s", x);					\
+		fclose(tmp);						\
+	} while (0)
+
+	DUMP_CFG_STR(cfg1);
+	DUMP_CFG_STR(cfg2);
+#endif
+
+#if BROKEN
+	condlog(1, "%s: WARNING: skipping tests for same configuration after dump/reload on %d",
+		__func__, __LINE__);
+#else
+	assert_int_equal(strlen(cfg2), strlen(cfg1));
+	assert_string_equal(cfg2, cfg1);
+#endif
+	free(cfg1);
+	free(cfg2);
+}
+
+/*
+ * Run hwt->test three times; once with the constructed configuration,
+ * once after re-reading the full dumped configuration, and once with the
+ * dumped local configuration.
  *
  * Expected: test passes every time.
  */
@@ -444,6 +503,10 @@ static void test_driver(void **state)
 	hwt = CHECK_STATE(state);
 	condlog(1, "### %s: testing: %s", __func__, hwt->test_name);
 	_conf = LOAD_CONFIG(hwt);
+	hwt->test(hwt);
+
+	replicate_config(hwt);
+	reset_vecs(hwt->vecs);
 	hwt->test(hwt);
 
 	reset_vecs(hwt->vecs);
