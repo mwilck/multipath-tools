@@ -29,10 +29,15 @@
 #define N_CONF_FILES 2
 
 static const char tmplate[] = "/tmp/hwtable-XXXXXX";
+static const char devnode[] = "sdTEST";
+static const char wwid[] = "TEST-WWID";
+static const char alias[] = "mppTEST";
+/* pretend new dm, use minio_rq */
+const unsigned int dm_tgt_version[3] = { 1, 1, 1 };
 
 struct key_value {
 	const char *key;
-	char *value;
+	const char *value;
 };
 
 struct hwt_state {
@@ -178,8 +183,12 @@ static void write_key_values(FILE *ff, int nkv, const struct key_value *kv)
 {
 	int i;
 
-	for (i = 0; i < nkv; i++)
-		fprintf(ff, "\t%s \"%s\"\n", kv[i].key, kv[i].value);
+	for (i = 0; i < nkv; i++) {
+		if (strchr(kv[i].value, ' ') == NULL)
+			fprintf(ff, "\t%s %s\n", kv[i].key, kv[i].value);
+		else
+			fprintf(ff, "\t%s \"%s\"\n", kv[i].key, kv[i].value);
+	}
 }
 
 static void begin_section(FILE *ff, const char *section)
@@ -302,6 +311,7 @@ static void write_device(FILE *ff, int nkv, const struct key_value *kv)
 	assert_ptr_not_equal(__cf, NULL);				\
 	assert_ptr_not_equal(__cf->hwtable, NULL);			\
 	__cf->verbosity = VERBOSITY;					\
+	memcpy(&__cf->version, dm_tgt_version, sizeof(__cf->version));	\
 	__cf; })
 
 #define FREE_CONFIG(conf) do {			\
@@ -333,6 +343,7 @@ static void write_device(FILE *ff, int nkv, const struct key_value *kv)
  * Some predefined key/value pairs
  */
 
+static const char _wwid[] = "wwid";
 static const char _vendor[] = "vendor";
 static const char _product[] = "product";
 static const char _prio[] = "prio";
@@ -340,6 +351,8 @@ static const char _checker[] = "path_checker";
 static const char _getuid[] = "getuid_callout";
 static const char _uid_attr[] = "uid_attribute";
 static const char _bl_product[] = "product_blacklist";
+static const char _minio[] = "rr_min_io_rq";
+static const char _no_path_retry[] = "no_path_retry";
 
 /* Device identifiers */
 static const struct key_value vnd_foo = { _vendor, "foo" };
@@ -348,6 +361,7 @@ static const struct key_value prd_bam = { _product, "bam" };
 static const struct key_value prd_barz = { _product, "barz" };
 static const struct key_value vnd_boo = { _vendor, "boo" };
 static const struct key_value prd_baz = { _product, "baz" };
+static const struct key_value wwid_test = { _wwid, wwid };
 
 /* Regular expresssions */
 static const struct key_value vnd__oo = { _vendor, ".oo" };
@@ -370,6 +384,9 @@ static const struct key_value bl_bar = { _bl_product, "bar" };
 static const struct key_value bl_baz = { _bl_product, "baz" };
 static const struct key_value bl_barx = { _bl_product, "ba[[rxy]" };
 static const struct key_value bl_bazy = { _bl_product, "ba[zy]" };
+static const struct key_value minio_99 = { _minio, "99" };
+static const struct key_value npr_37 = { _no_path_retry, "37" };
+static const struct key_value npr_queue = { _no_path_retry, "queue" };
 
 /*
  * Helper wrappers for mock_path().
@@ -495,7 +512,8 @@ static void mock_scsi_sysfs_pathinfo(const char *vendor, const char *prod,
  * Pretend we detected a SCSI device with given vendor/prod/rev
  */
 static struct path *_mock_path(const char *vendor, const char *prod,
-			       const char *rev, bool blacklisted)
+			       const char *rev, const char *_wwid,
+			       bool blacklisted)
 {
 	struct path *pp;
 	struct config *conf;
@@ -506,8 +524,8 @@ static struct path *_mock_path(const char *vendor, const char *prod,
 	pp->udev = (void *)pp; /* fake non-NULL udev */
 	pp->detect_prio = DETECT_PRIO_OFF;
 	pp->detect_checker = DETECT_CHECKER_OFF;
-	strlcpy(pp->dev, "sdTEST", sizeof(pp->dev));
-	strlcpy(pp->wwid, "TEST-WWID", sizeof(pp->wwid));
+	strlcpy(pp->dev, devnode, sizeof(pp->dev));
+	strlcpy(pp->wwid, _wwid, sizeof(pp->wwid));
 
 	mock_scsi_sysfs_pathinfo(vendor, prod, rev);
 
@@ -539,8 +557,9 @@ static struct path *_mock_path(const char *vendor, const char *prod,
 	return pp;
 }
 
-#define mock_path(v, p, r) _mock_path((v), (p), (r), false)
-#define mock_path_blacklisted(v, p, r) _mock_path((v), (p), (r), true)
+#define mock_path(v, p, r) _mock_path((v), (p), (r), wwid, false)
+#define mock_path_blacklisted(v, p, r) _mock_path((v), (p), (r), wwid, true)
+#define mock_path_wwid(v, p, r, w) _mock_path((v), (p), (r), (w), false)
 
 static struct multipath *mock_multipath(struct path *pp)
 {
@@ -549,7 +568,8 @@ static struct multipath *mock_multipath(struct path *pp)
 
 	if (!mp)
 		return NULL;
-	mp->alias = strdup("mppTEST");
+	strcpy(mp->wwid, pp->wwid);
+	mp->alias = strdup(alias);
 	mp->paths = vector_alloc();
 	if (mp->paths == NULL || mp->alias == NULL)
 		goto out_free;
@@ -562,9 +582,11 @@ static struct multipath *mock_multipath(struct path *pp)
 		goto out_free;
 
 	conf = get_multipath_config();
+	mp->mpe = find_mpe(conf->mptable, mp->wwid);
 	select_pgpolicy(conf, mp);
 	select_no_path_retry(conf, mp);
 	select_retain_hwhandler(conf, mp);
+	select_minio(conf, mp);
 	put_multipath_config(conf);
 	return mp;
 
@@ -589,6 +611,8 @@ static void test_sanity_globals(void **state)
 	assert_string_not_equal(chk_hp.value, DEFAULT_CHECKER);
 	assert_int_not_equal(MULTIBUS, DEFAULT_PGPOLICY);
 	assert_int_not_equal(NO_PATH_RETRY_QUEUE, DEFAULT_NO_PATH_RETRY);
+	assert_int_not_equal(atoi(minio_99.value), DEFAULT_MINIO_RQ);
+	assert_int_not_equal(atoi(npr_37.value), DEFAULT_NO_PATH_RETRY);
 }
 
 /*
@@ -1521,6 +1545,135 @@ static void test_product_blacklist_matching(void **state)
 	FREE_CONFIG(_conf);
 }
 
+/*
+ * Basic test for multipath-based configuration.
+ *
+ * Expected: properties, including pp->prio, are taken from multipath
+ * section.
+ */
+static void test_multipath_config(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	struct multipath *mp;
+	const struct key_value kvm[] = { wwid_test, prio_rdac, minio_99 };
+	const struct key_value kvp[] = { vnd_foo, prd_bar, prio_emc, uid_baz };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "devices");
+	write_section(hwt->conf_dir_file[0], "device", ARRAY_SIZE(kvp), kvp);
+	end_section_all(hwt);
+	begin_section_all(hwt, "multipaths");
+	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kvm), kvm);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path(vnd_foo.value, prd_bar.value, "0");
+	mp = mock_multipath(pp);
+	assert_ptr_not_equal(mp, NULL);
+	assert_ptr_not_equal(mp->mpe, NULL);
+	TEST_PROP(prio_name(&pp->prio), kvm[1].value);
+	assert_int_equal(mp->minio, atoi(kvm[2].value));
+	TEST_PROP(pp->uid_attribute, kvp[3].value);
+	free_multipath(mp, FREE_PATHS);
+
+	/* test different wwid */
+	pp = mock_path_wwid(vnd_foo.value, prd_bar.value, "0", "other-wwid");
+	mp = mock_multipath(pp);
+	assert_ptr_not_equal(mp, NULL);
+	assert_ptr_equal(mp->mpe, NULL);
+	TEST_PROP(prio_name(&pp->prio), kvp[2].value);
+	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
+	TEST_PROP(pp->uid_attribute, kvp[3].value);
+	free_multipath(mp, FREE_PATHS);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Basic test for multipath-based configuration. Two sections for the same wwid.
+ *
+ * Expected: properties are taken from both multipath sections.
+ */
+static void test_multipath_config_2(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	struct multipath *mp;
+	const struct key_value kv1[] = { wwid_test, prio_rdac, npr_queue };
+	const struct key_value kv2[] = { wwid_test, minio_99, npr_37 };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "multipaths");
+	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv1), kv1);
+	write_section(hwt->conf_dir_file[1], "multipath", ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path(vnd_foo.value, prd_bar.value, "0");
+	mp = mock_multipath(pp);
+	assert_ptr_not_equal(mp, NULL);
+	assert_ptr_not_equal(mp->mpe, NULL);
+	TEST_PROP(prio_name(&pp->prio), kv1[1].value);
+#if BROKEN
+	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
+	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
+	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
+	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
+#else
+	assert_int_equal(mp->minio, atoi(kv2[1].value));
+	assert_int_equal(mp->no_path_retry, atoi(kv2[2].value));
+#endif
+	free_multipath(mp, FREE_PATHS);
+
+	FREE_CONFIG(_conf);
+}
+
+/*
+ * Same as test_multipath_config_2, both entries in the same config file.
+ *
+ * Expected: properties, are taken from both multipath sections.
+ */
+static void test_multipath_config_3(void **state)
+{
+	const struct hwt_state *hwt;
+	struct path *pp;
+	struct multipath *mp;
+	const struct key_value kv1[] = { wwid_test, prio_rdac, npr_queue };
+	const struct key_value kv2[] = { wwid_test, minio_99, npr_37 };
+
+	hwt = CHECK_STATE(state);
+	begin_config(hwt);
+	begin_section_all(hwt, "multipaths");
+	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv1), kv1);
+	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	_conf = LOAD_CONFIG(hwt);
+
+	pp = mock_path(vnd_foo.value, prd_bar.value, "0");
+	mp = mock_multipath(pp);
+	assert_ptr_not_equal(mp, NULL);
+	assert_ptr_not_equal(mp->mpe, NULL);
+	TEST_PROP(prio_name(&pp->prio), kv1[1].value);
+#if BROKEN
+	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
+	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
+	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
+	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
+#else
+	assert_int_equal(mp->minio, atoi(kv2[1].value));
+	assert_int_equal(mp->no_path_retry, atoi(kv2[2].value));
+#endif
+	free_multipath(mp, FREE_PATHS);
+
+	FREE_CONFIG(_conf);
+}
+
 static int test_hwtable(void)
 {
 	const struct CMUnitTest tests[] = {
@@ -1548,6 +1701,9 @@ static int test_hwtable(void)
 		cmocka_unit_test(test_blacklist_regex_matching),
 		cmocka_unit_test(test_product_blacklist),
 		cmocka_unit_test(test_product_blacklist_matching),
+		cmocka_unit_test(test_multipath_config),
+		cmocka_unit_test(test_multipath_config_2),
+		cmocka_unit_test(test_multipath_config_3),
 	};
 
 	return cmocka_run_group_tests(tests, setup, teardown);
