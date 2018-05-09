@@ -1404,12 +1404,16 @@ static int snprint_hwtable(const struct config *conf,
 
 static int
 snprint_mpentry (const struct config *conf, char * buff, int len,
-		 const struct mpentry * mpe)
+		 const struct mpentry * mpe, const struct _vector *mpvec)
 {
 	int i;
 	int fwd = 0;
 	struct keyword * kw;
 	struct keyword * rootkw;
+	struct multipath *mpp = NULL;
+
+	if (mpvec != NULL && (mpp = find_mp_by_wwid(mpvec, mpe->wwid)) == NULL)
+		return 0;
 
 	rootkw = find_keyword(conf->keywords, NULL, "multipath");
 	if (!rootkw)
@@ -1421,6 +1425,15 @@ snprint_mpentry (const struct config *conf, char * buff, int len,
 	iterate_sub_keywords(rootkw, kw, i) {
 		fwd += snprint_keyword(buff + fwd, len - fwd, "\t\t%k %v\n",
 				kw, mpe);
+		if (fwd >= len)
+			return len;
+	}
+	/*
+	 * This mpp doesn't have alias defined. Add the alias in a comment.
+	 */
+	if (mpp != NULL && strcmp(mpp->alias, mpp->wwid)) {
+		fwd += snprintf(buff + fwd, len - fwd, "\t\t# alias \"%s\"\n",
+				mpp->alias);
 		if (fwd >= len)
 			return len;
 	}
@@ -1446,7 +1459,7 @@ static int snprint_mptable(const struct config *conf,
 	if (fwd >= len)
 		return len;
 	vector_foreach_slot (conf->mptable, mpe, i) {
-		fwd += snprint_mpentry(conf, buff + fwd, len - fwd, mpe);
+		fwd += snprint_mpentry(conf, buff + fwd, len - fwd, mpe, mpvec);
 		if (fwd >= len)
 			return len;
 	}
