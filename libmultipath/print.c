@@ -1424,7 +1424,7 @@ snprint_mpentry (const struct config *conf, char * buff, int len,
 }
 
 static int snprint_mptable(const struct config *conf,
-			   char *buff, int len, vector mptable)
+			   char *buff, int len, const struct _vector *mpvec)
 {
 	int fwd = 0;
 	int i;
@@ -1438,10 +1438,42 @@ static int snprint_mptable(const struct config *conf,
 	fwd += snprintf(buff + fwd, len - fwd, "multipaths {\n");
 	if (fwd >= len)
 		return len;
-	vector_foreach_slot (mptable, mpe, i) {
+	vector_foreach_slot (conf->mptable, mpe, i) {
 		fwd += snprint_mpentry(conf, buff + fwd, len - fwd, mpe);
 		if (fwd >= len)
 			return len;
+	}
+	if (mpvec != NULL) {
+		struct multipath *mpp;
+
+		vector_foreach_slot(mpvec, mpp, i) {
+			if (find_mpe(conf->mptable, mpp->wwid) != NULL)
+				continue;
+
+			fwd += snprintf(buff + fwd, len - fwd,
+					"\tmultipath {\n");
+			if (fwd >= len)
+				return len;
+			fwd += snprintf(buff + fwd, len - fwd,
+					"\t\twwid \"%s\"\n", mpp->wwid);
+			if (fwd >= len)
+				return len;
+			/*
+			 * This mpp doesn't have alias defined in
+			 * multipath.conf - otherwise find_mpe would have
+			 * found it. Add the alias in a comment.
+			 */
+			if (strcmp(mpp->alias, mpp->wwid)) {
+				fwd += snprintf(buff + fwd, len - fwd,
+						"\t\t# alias \"%s\"\n",
+						mpp->alias);
+				if (fwd >= len)
+					return len;
+			}
+			fwd += snprintf(buff + fwd, len - fwd, "\t}\n");
+			if (fwd >= len)
+				return len;
+		}
 	}
 	fwd += snprintf(buff + fwd, len - fwd, "}\n");
 	if (fwd >= len)
@@ -1776,7 +1808,7 @@ static int snprint_blacklist_except(const struct config *conf,
 }
 
 char *snprint_config(const struct config *conf, int *len,
-		     const struct _vector *hwtable)
+		     const struct _vector *hwtable, const struct _vector *mpvec)
 {
 	char *reply;
 	/* built-in config is >20kB already */
@@ -1814,9 +1846,10 @@ char *snprint_config(const struct config *conf, int *len,
 		if ((c - reply) == maxlen)
 			continue;
 
-		if (VECTOR_SIZE(conf->mptable) > 0)
+		if (VECTOR_SIZE(conf->mptable) > 0 ||
+		    (mpvec != NULL && VECTOR_SIZE(mpvec) > 0))
 			c += snprint_mptable(conf, c, reply + maxlen - c,
-					     conf->mptable);
+					     mpvec);
 
 		if ((c - reply) < maxlen) {
 			if (len)
