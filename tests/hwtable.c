@@ -1619,15 +1619,8 @@ static void test_multipath_config_2(void **state)
 	assert_ptr_not_equal(mp, NULL);
 	assert_ptr_not_equal(mp->mpe, NULL);
 	TEST_PROP(prio_name(&pp->prio), kv1[1].value);
-#if BROKEN
-	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
-	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
-	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
-	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
-#else
 	assert_int_equal(mp->minio, atoi(kv2[1].value));
 	assert_int_equal(mp->no_path_retry, atoi(kv2[2].value));
-#endif
 	free_multipath(mp, FREE_PATHS);
 
 	FREE_CONFIG(_conf);
@@ -1660,15 +1653,8 @@ static void test_multipath_config_3(void **state)
 	assert_ptr_not_equal(mp, NULL);
 	assert_ptr_not_equal(mp->mpe, NULL);
 	TEST_PROP(prio_name(&pp->prio), kv1[1].value);
-#if BROKEN
-	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
-	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
-	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
-	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
-#else
 	assert_int_equal(mp->minio, atoi(kv2[1].value));
 	assert_int_equal(mp->no_path_retry, atoi(kv2[2].value));
-#endif
 	free_multipath(mp, FREE_PATHS);
 
 	FREE_CONFIG(_conf);
