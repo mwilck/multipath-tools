@@ -79,6 +79,7 @@ extern void vector_free(vector v);
 #define vector_free_const(x) vector_free((vector)(long)(x))
 extern void free_strvec(vector strvec);
 extern void vector_set_slot(vector v, void *value);
+void vector_assign_slot(vector v, int i, void *value);
 extern void vector_del_slot(vector v, int slot);
 extern void *vector_insert_slot(vector v, int slot, void *value);
 int find_slot(vector v, void * addr);

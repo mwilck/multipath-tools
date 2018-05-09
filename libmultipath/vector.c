@@ -196,3 +196,13 @@ vector_set_slot(vector v, void *value)
 	i = VECTOR_SIZE(v) - 1;
 	v->slot[i] = value;
 }
+
+/* Set a vector slot value */
+void
+vector_assign_slot(vector v, int i, void *value)
+{
+	if (!v || i >= VECTOR_SIZE(v))
+		return;
+
+	v->slot[i] = value;
+}
