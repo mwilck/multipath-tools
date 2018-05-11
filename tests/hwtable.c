@@ -34,6 +34,7 @@ static const char default_wwid[] = "TEST-WWID";
 static const char default_wwid_1[] = "TEST-WWID-1";
 /* pretend new dm, use minio_rq */
 static const unsigned int dm_tgt_version[3] = { 1, 1, 1 };
+static const char _mocked_filename[] = "mocked_path";
 
 struct key_value {
 	const char *key;
@@ -45,6 +46,7 @@ struct hwt_state {
 	char *dirname;
 	FILE *config_file;
 	FILE *conf_dir_file[N_CONF_FILES];
+	struct vectors *vecs;
 };
 
 static struct config *_conf;
@@ -69,6 +71,17 @@ void make_config_file_path(char *buf, int buflen,
 		snprintf(buf, buflen, fn_template, hwt->tmpname, 0);
 	else
 		snprintf(buf, buflen, fn_template, hwt->dirname, i);
+}
+
+static void reset_vecs(struct vectors *vecs)
+{
+	remove_maps(vecs);
+	free_pathvec(vecs->pathvec, FREE_PATHS);
+
+	vecs->pathvec = vector_alloc();
+	assert_ptr_not_equal(vecs->pathvec, NULL);
+	vecs->mpvec = vector_alloc();
+	assert_ptr_not_equal(vecs->mpvec, NULL);
 }
 
 static void free_hwt(struct hwt_state *hwt)
@@ -97,6 +110,15 @@ static void free_hwt(struct hwt_state *hwt)
 		}
 		rmdir(hwt->dirname);
 		free(hwt->dirname);
+	}
+
+	if (hwt->vecs != NULL) {
+		if (hwt->vecs->mpvec != NULL)
+			remove_maps(hwt->vecs);
+		if (hwt->vecs->pathvec != NULL)
+			free_pathvec(hwt->vecs->pathvec, FREE_PATHS);
+		pthread_mutex_destroy(&hwt->vecs->lock.mutex);
+		free(hwt->vecs);
 	}
 	free(hwt);
 }
@@ -137,6 +159,15 @@ static int setup(void **state)
 		if (hwt->conf_dir_file[i] == NULL)
 			goto err;
 	}
+
+	hwt->vecs = calloc(1, sizeof(*hwt->vecs));
+	if (hwt->vecs == NULL)
+		goto err;
+	pthread_mutex_init(&hwt->vecs->lock.mutex, NULL);
+	hwt->vecs->pathvec = vector_alloc();
+	hwt->vecs->mpvec = vector_alloc();
+	if (hwt->vecs->pathvec == NULL || hwt->vecs->mpvec == NULL)
+		goto err;
 
 	*state = hwt;
 	return 0;
@@ -212,13 +243,18 @@ static void write_section(FILE *ff, const char *section,
 
 static void write_defaults(const struct hwt_state *hwt)
 {
+	static const char bindings_name[] = "bindings";
 	static struct key_value defaults[] = {
 		{ "config_dir", NULL },
+		{ "bindings_file", NULL },
 		{ "detect_prio", "no" },
 		{ "detect_checker", "no" },
 	};
+	char buf[sizeof(tmplate) + sizeof(bindings_name)];
 
+	snprintf(buf, sizeof(buf), "%s/%s", hwt->tmpname, bindings_name);
 	defaults[0].value = hwt->dirname;
+	defaults[1].value = buf;
 	write_section(hwt->config_file, "defaults",
 		      ARRAY_SIZE(defaults), defaults);
 }
@@ -404,22 +440,60 @@ static const struct key_value npr_queue = { _no_path_retry, "queue" };
  * resolved by the assembler before the linking stage.
  */
 
+int __real_open(const char *path, int flags, int mode);
+int __wrap_open(const char *path, int flags, int mode)
+{
+	condlog(4, "%s: %s", __func__, path);
+
+	if (!strcmp(path, _mocked_filename))
+		return 111;
+	return __real_open(path, flags, mode);
+}
+
+int __wrap_execute_program(char *path, char *value, int len)
+{
+	char *val = mock_ptr_type(char *);
+
+	condlog(5, "%s: %s", __func__, val);
+	strlcpy(value, val, len);
+	return 0;
+}
+
 bool __wrap_is_claimed_by_foreign(struct udev_device *ud)
 {
 	condlog(5, "%s: %p", __func__, ud);
 	return false;
 }
 
-int __wrap_filter_property(struct config *conf, struct udev_device *ud)
+struct udev_list_entry
+*__wrap_udev_device_get_properties_list_entry(struct udev_device *ud)
 {
-	condlog(5, "%s: %p", __func__, ud);
-	return 0;
+	void *p = (void*)0x12345678;
+	condlog(5, "%s: %p", __func__, p);
+
+	return p;
 }
 
-int __wrap_filter_devnode(vector blist, vector elist, char *dev)
+struct udev_list_entry
+*__wrap_udev_list_entry_get_next(struct udev_list_entry *udle)
 {
-	condlog(5, "%s: %p", __func__, dev);
-	return 0;
+	void *p  = NULL;
+	condlog(5, "%s: %p", __func__, p);
+
+	return p;
+}
+
+const char *__wrap_udev_list_entry_get_name(struct udev_list_entry *udle)
+{
+	char *val = mock_ptr_type(char *);
+
+	condlog(5, "%s: %s", __func__, val);
+	return val;
+}
+
+struct udev_device *__wrap_udev_device_ref(struct udev_device *ud)
+{
+	return ud;
 }
 
 struct udev_device *__wrap_udev_device_unref(struct udev_device *ud)
@@ -443,6 +517,14 @@ char *__wrap_udev_device_get_sysname(struct udev_device *ud)
 	return val;
 }
 
+char *__wrap_udev_device_get_devnode(struct udev_device *ud)
+{
+	char *val  = mock_ptr_type(char *);
+
+	condlog(5, "%s: %s", __func__, val);
+	return val;
+}
+
 dev_t __wrap_udev_device_get_devnum(struct udev_device *ud)
 {
 	condlog(5, "%s: %p", __func__, ud);
@@ -451,6 +533,15 @@ dev_t __wrap_udev_device_get_devnum(struct udev_device *ud)
 
 char *__wrap_udev_device_get_sysattr_value(struct udev_device *ud,
 					     const char *attr)
+{
+	char *val  = mock_ptr_type(char *);
+
+	condlog(5, "%s: %s->%s", __func__, attr, val);
+	return val;
+}
+
+char *__wrap_udev_device_get_property_value(struct udev_device *ud,
+					    const char *attr)
 {
 	char *val  = mock_ptr_type(char *);
 
@@ -490,19 +581,83 @@ ssize_t __wrap_sysfs_attr_get_value(struct udev_device *dev,
 	return strlen(value);
 }
 
-static void mock_scsi_sysfs_pathinfo(const char *vendor, const char *prod,
-				     const char *rev)
+int __wrap_checker_check(struct checker *c, int st)
 {
-	const char hbtl[] = "4:0:3:1";
+	condlog(5, "%s: %d", __func__, st);
+	return st;
+}
+
+int __wrap_prio_getprio(struct prio *p, struct path *pp, unsigned int tmo)
+{
+	int pr = 5;
+
+	condlog(5, "%s: %d", __func__, pr);
+	return pr;
+}
+
+enum {
+	BL_BY_DEVNODE	= (1 << 0),
+	BL_BY_DEVICE	= (1 << 1),
+	BL_BY_WWID	= (1 << 2),
+	BL_BY_PROPERTY	= (1 << 3),
+	BL_MASK = BL_BY_DEVNODE|BL_BY_DEVICE|BL_BY_WWID|BL_BY_PROPERTY,
+	NEED_SELECT_PRIO = (1 << 8),
+	NEED_FD		= (1 << 9),
+	USE_GETUID	= (1 << 10)
+};
+
+struct mocked_path {
+	const char *vendor;
+	const char *product;
+	const char *rev;
+	const char *wwid;
+	const char *devnode;
+	unsigned int flags;
+};
+
+static struct mocked_path *fill_mocked_path(struct mocked_path *mp,
+					    const char *vendor,
+					    const char *product,
+					    const char *rev,
+					    const char *wwid,
+					    const char *devnode,
+					    unsigned int flags)
+{
+	mp->vendor = (vendor ? vendor : "noname");
+	mp->product = (product ? product : "noprod");
+	mp->rev = (rev ? rev : "0");
+	mp->wwid = (wwid ? wwid : default_wwid);
+	mp->devnode = (devnode ? devnode : default_devnode);
+	mp->flags = flags|NEED_SELECT_PRIO|NEED_FD;
+	return mp;
+}
+
+static struct mocked_path *mocked_path_from_path(struct mocked_path *mp,
+						 struct path *pp)
+{
+	mp->vendor = pp->vendor_id;
+	mp->product = pp->product_id;
+	mp->rev = pp->rev;
+	mp->wwid = pp->wwid;
+	mp->devnode = pp->dev;
+	mp->flags = (prio_selected(&pp->prio) ? 0 : NEED_SELECT_PRIO) |
+		(pp->fd < 0 ? NEED_FD : 0) |
+		(pp->getuid ? USE_GETUID : 0);
+	return mp;
+}
+
+static void mock_sysfs_pathinfo(const struct mocked_path *mp)
+{
+	static const char hbtl[] = "4:0:3:1";
 
 	will_return(__wrap_udev_device_get_subsystem, "scsi");
 	will_return(__wrap_udev_device_get_sysname, hbtl);
 	will_return(__wrap_udev_device_get_sysname, hbtl);
-	will_return(__wrap_udev_device_get_sysattr_value, vendor);
+	will_return(__wrap_udev_device_get_sysattr_value, mp->vendor);
 	will_return(__wrap_udev_device_get_sysname, hbtl);
-	will_return(__wrap_udev_device_get_sysattr_value, prod);
+	will_return(__wrap_udev_device_get_sysattr_value, mp->product);
 	will_return(__wrap_udev_device_get_sysname, hbtl);
-	will_return(__wrap_udev_device_get_sysattr_value, rev);
+	will_return(__wrap_udev_device_get_sysattr_value, mp->rev);
 
 	/* sysfs_get_tgt_nodename */
 	will_return(__wrap_udev_device_get_sysattr_value, NULL);
@@ -517,90 +672,134 @@ static void mock_scsi_sysfs_pathinfo(const char *vendor, const char *prod,
 /*
  * Pretend we detected a SCSI device with given vendor/prod/rev
  */
-static struct path *_mock_path(const char *vendor, const char *prod,
-			       const char *rev, const char *_wwid,
-			       bool blacklisted)
+static void mock_pathinfo(int mask, const struct mocked_path *mp)
 {
-	struct path *pp;
-	struct config *conf;
+	/* filter_property */
+	will_return(__wrap_udev_device_get_sysname, mp->devnode);
+	if (mp->flags & BL_BY_PROPERTY) {
+		will_return(__wrap_udev_list_entry_get_name, "BAZ");
+		return;
+	} else
+		will_return(__wrap_udev_list_entry_get_name,
+			    "SCSI_IDENT_LUN_NAA_EXT");
 
-	pp = alloc_path();
-	assert_ptr_not_equal(pp, NULL);
+	if (mask & DI_SYSFS)
+		mock_sysfs_pathinfo(mp);
 
-	pp->udev = (void *)pp; /* fake non-NULL udev */
-	pp->detect_prio = DETECT_PRIO_OFF;
-	pp->detect_checker = DETECT_CHECKER_OFF;
-	strlcpy(pp->dev, default_devnode, sizeof(pp->dev));
-	strlcpy(pp->wwid, _wwid, sizeof(pp->wwid));
-
-	mock_scsi_sysfs_pathinfo(vendor, prod, rev);
-
-	if (blacklisted) {
-		conf = get_multipath_config();
-		assert_int_equal(pathinfo(pp, conf,
-					  DI_SYSFS|DI_NOIO|DI_BLACKLIST),
-				 PATHINFO_SKIPPED);
-		put_multipath_config(conf);
-		return pp;
-	}
+	if (mp->flags & BL_BY_DEVICE &&
+	    (mask & DI_BLACKLIST && mask & DI_SYSFS))
+		return;
 
 	/* path_offline */
 	will_return(__wrap_udev_device_get_subsystem, "scsi");
 	will_return(__wrap_sysfs_attr_get_value, "running");
 
-	conf = get_multipath_config();
-	assert_int_equal(pathinfo(pp, conf, DI_SYSFS|DI_NOIO|DI_BLACKLIST),
-			 PATHINFO_OK);
-	select_prio(conf, pp);
-	select_getuid(conf, pp);
+	if (mask & DI_NOIO)
+		return;
 
-	/* sysfs_get_timeout */
-	will_return(__wrap_udev_device_get_subsystem, "scsi");
-	will_return(__wrap_udev_device_get_sysattr_value, "180");
-	select_checker(conf, pp);
+	/* fake open() in pathinfo() */
+	if (mp->flags & NEED_FD)
+		will_return(__wrap_udev_device_get_devnode, _mocked_filename);
+	/* DI_SERIAL is unsupported */
+	assert_false(mask & DI_SERIAL);
+
+	if (mask & DI_WWID) {
+		if (mp->flags & USE_GETUID)
+			will_return(__wrap_execute_program, mp->wwid);
+		else
+			/* get_udev_uid() */
+			will_return(__wrap_udev_device_get_property_value,
+				    mp->wwid);
+	}
+
+	if (mask & DI_CHECKER) {
+		/* get_state -> sysfs_get_timeout  */
+		will_return(__wrap_udev_device_get_subsystem, "scsi");
+		will_return(__wrap_udev_device_get_sysattr_value, "180");
+	}
+
+	if (mask & DI_PRIO && mp->flags & NEED_SELECT_PRIO) {
+
+		/* sysfs_get_timeout, again (!?) */
+		will_return(__wrap_udev_device_get_subsystem, "scsi");
+		will_return(__wrap_udev_device_get_sysattr_value, "180");
+
+	}
+}
+
+static void mock_store_pathinfo(int mask,  const struct mocked_path *mp)
+{
+	will_return(__wrap_udev_device_get_sysname, mp->devnode);
+	mock_pathinfo(mask, mp);
+}
+
+static struct path *__mock_path(vector pathvec,
+				const char *vnd, const char *prd,
+				const char *rev, const char *wwid,
+				const char *dev,
+				unsigned int flags, int mask)
+{
+	struct mocked_path mop;
+	struct path *pp;
+	struct config *conf;
+	int r;
+
+	fill_mocked_path(&mop, vnd, prd, rev, wwid, dev, flags);
+	mock_store_pathinfo(mask, &mop);
+
+	conf = get_multipath_config();
+	r = store_pathinfo(pathvec, conf, (void *)&mop, mask, &pp);
 	put_multipath_config(conf);
 
+	if (flags & BL_MASK) {
+		assert_int_equal(r, PATHINFO_SKIPPED);
+		return NULL;
+	}
+	assert_int_equal(r, PATHINFO_OK);
+	assert_non_null(pp);
 	return pp;
 }
 
-#define mock_path(v, p) _mock_path((v), (p), "0", default_wwid, false)
-#define mock_path_blacklisted(v, p) _mock_path((v), (p), "0", default_wwid, \
-					       true)
-#define mock_path_wwid(v, p, w) _mock_path((v), (p), "0", (w), false)
+int default_mask = (DI_SYSFS|DI_BLACKLIST|DI_WWID|DI_CHECKER|DI_PRIO);
 
-static struct multipath *mock_multipath(struct path *pp)
+#define mock_path(v, p) __mock_path(hwt->vecs->pathvec, \
+				       (v), (p), "0", NULL, NULL, \
+				       0, default_mask)
+#define mock_path_flags(v, p, f) __mock_path(hwt->vecs->pathvec, \
+						(v), (p), "0", NULL, NULL, \
+						(f), default_mask)
+#define mock_path_blacklisted(v, p) __mock_path(hwt->vecs->pathvec, \
+						   (v), (p), "0", NULL, NULL, \
+						   BL_BY_DEVICE, default_mask)
+#define mock_path_wwid(v, p, w) __mock_path(hwt->vecs->pathvec,		\
+					       (v), (p), "0", (w), NULL, \
+					       0, default_mask)
+
+static struct multipath *__mock_multipath(struct vectors *vecs, struct path *pp)
 {
-	struct multipath *mp = alloc_multipath();
+	struct multipath *mp;
 	struct config *conf;
+	struct mocked_path mop;
 
-	if (!mp)
-		return NULL;
-	strcpy(mp->wwid, pp->wwid);
-	mp->alias = strdup("mppTEST");
-	mp->paths = vector_alloc();
-	if (mp->paths == NULL || mp->alias == NULL)
-		goto out_free;
-	if (vector_alloc_slot(mp->paths) == NULL)
-		goto out_free;
+	mocked_path_from_path(&mop, pp);
+	/* pathinfo() call in adopt_paths */
+	mock_pathinfo(DI_CHECKER|DI_PRIO, &mop);
 
-	vector_set_slot(mp->paths, pp);
-	extract_hwe_from_path(mp);
-	if (mp->hwe == NULL)
-		goto out_free;
+	mp = add_map_with_path(vecs, pp, 1);
+	assert_ptr_not_equal(mp, NULL);
 
+	/* TBD: mock setup_map() ... */
 	conf = get_multipath_config();
-	mp->mpe = find_mpe(conf->mptable, mp->wwid);
 	select_pgpolicy(conf, mp);
 	select_no_path_retry(conf, mp);
 	select_retain_hwhandler(conf, mp);
 	select_minio(conf, mp);
 	put_multipath_config(conf);
-	return mp;
 
-out_free:
-	free_multipath(mp, KEEP_PATHS);
-	return NULL;
+	return mp;
 }
+
+#define mock_multipath(pp) __mock_multipath(hwt->vecs, (pp))
 
 /***** BEGIN TESTS SECTION *****/
 
@@ -633,6 +832,7 @@ static void test_internal_nvme(void **state)
 	struct multipath *mp;
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_EMPTY_CONF(hwt);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -647,12 +847,12 @@ static void test_internal_nvme(void **state)
 	assert_int_equal(mp->pgpolicy, DEFAULT_PGPOLICY);
 	assert_int_equal(mp->no_path_retry, DEFAULT_NO_PATH_RETRY);
 	assert_int_equal(mp->retain_hwhandler, RETAIN_HWHANDLER_OFF);
-	free_multipath(mp, FREE_PATHS);
 
 	/*
 	 * NetApp NVMe: expect special values for pgpolicy and no_path_retry
 	 */
-	pp = mock_path("NVME", "NetApp ONTAP Controller");
+	pp = mock_path_wwid("NVME", "NetApp ONTAP Controller",
+			    default_wwid_1);
 	mp = mock_multipath(pp);
 	assert_ptr_not_equal(mp, NULL);
 	TEST_PROP(pp->checker.name, NONE);
@@ -660,7 +860,6 @@ static void test_internal_nvme(void **state)
 	assert_int_equal(mp->pgpolicy, MULTIBUS);
 	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
 	assert_int_equal(mp->retain_hwhandler, RETAIN_HWHANDLER_OFF);
-	free_multipath(mp, FREE_PATHS);
 
 	FREE_CONFIG(_conf);
 }
@@ -681,17 +880,14 @@ static void test_string_hwe(void **state)
 	/* foo:bar matches */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
-	free_path(pp);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
-	free_path(pp);
 
 	/* boo:bar doesn't match */
 	pp = mock_path(vnd_boo.value, prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -706,33 +902,29 @@ static void test_regex_hwe(void **state)
 	const struct key_value kv[] = { vnd_t_oo, prd_ba_s, prio_emc };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_ONE_DEVICE(hwt, kv);
 	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar matches */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
-	free_path(pp);
 
 	/* foo:baz matches */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
-	free_path(pp);
 
 	/* boo:baz matches */
 	pp = mock_path(vnd_boo.value, prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
-	free_path(pp);
 
 	/* foo:BAR doesn't match */
 	pp = mock_path(vnd_foo.value, "BAR");
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
-	free_path(pp);
 
 	/* bboo:bar doesn't match */
 	pp = mock_path("bboo", prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -756,6 +948,7 @@ static void test_regex_string_hwe(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -764,31 +957,27 @@ static void test_regex_string_hwe(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* boo:baz matches kv1 */
 	pp = mock_path(vnd_boo.value, prd_baz.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* .oo:ba. matches kv1 */
 	pp = mock_path(vnd__oo.value, prd_ba_.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* .foo:(bar|baz|ba\.) doesn't match */
 	pp = mock_path(vnd__oo.value, prd_ba_s.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches kv2 and kv1 */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	/*
@@ -797,7 +986,6 @@ static void test_regex_string_hwe(void **state)
 	 */
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -823,6 +1011,7 @@ static void test_regex_string_hwe_dir(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -831,37 +1020,32 @@ static void test_regex_string_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* boo:baz matches kv1 */
 	pp = mock_path(vnd_boo.value, prd_baz.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* .oo:ba. matches kv1 */
 	pp = mock_path(vnd__oo.value, prd_ba_.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* .oo:(bar|baz|ba\.)$ doesn't match */
 	pp = mock_path(vnd__oo.value, prd_ba_s.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches kv2 */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	/* Later match takes prio */
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	/* This time it's merged */
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -884,6 +1068,7 @@ static void test_regex_2_strings_hwe_dir(void **state)
 					 prio_rdac, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "devices");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
@@ -899,7 +1084,6 @@ static void test_regex_2_strings_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->uid_attribute, DEFAULT_UID_ATTRIBUTE);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* boo:baz doesn't match */
 	pp = mock_path(vnd_boo.value, prd_baz.value);
@@ -907,7 +1091,6 @@ static void test_regex_2_strings_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->uid_attribute, DEFAULT_UID_ATTRIBUTE);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches kv2 and kv1 */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
@@ -915,15 +1098,13 @@ static void test_regex_2_strings_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->uid_attribute, uid_baz.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* foo:barz matches kv3 and kv2 and kv1 */
-	pp = mock_path(vnd_foo.value, prd_barz.value);
+	pp = mock_path_flags(vnd_foo.value, prd_barz.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_rdac.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->uid_attribute, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -946,43 +1127,40 @@ static void test_string_regex_hwe_dir(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv2, kv1);
 	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar matches kv2 and kv1 */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value,
+			     BROKEN == 1 ? 0 : USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
-	TEST_PROP_BROKEN(_getuid, pp->getuid, (char*)NULL, gui_foo.value);
+	TEST_PROP_BROKEN(_getuid, pp->getuid, (char *)NULL, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* foo:baz matches kv1 */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* boo:baz matches kv1 */
 	pp = mock_path(vnd_boo.value, prd_baz.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* .oo:ba. matches kv1 */
 	pp = mock_path(vnd__oo.value, prd_ba_.value);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* .oo:(bar|baz|ba\.)$ doesn't match */
 	pp = mock_path(vnd__oo.value, prd_ba_s.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1005,6 +1183,7 @@ static void test_2_ident_strings_hwe(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1013,15 +1192,13 @@ static void test_2_ident_strings_hwe(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both, but only kv2 is seen */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
 			 chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1041,6 +1218,7 @@ static void test_2_ident_strings_both_dir(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "devices");
 	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv1), kv1);
@@ -1054,15 +1232,13 @@ static void test_2_ident_strings_both_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
 			 chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1083,6 +1259,7 @@ static void test_2_ident_strings_both_dir_w_prev(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "devices");
 	write_device(hwt->config_file, ARRAY_SIZE(kv0), kv0);
@@ -1097,15 +1274,13 @@ static void test_2_ident_strings_both_dir_w_prev(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
 			 chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1129,6 +1304,7 @@ static void test_2_ident_strings_hwe_dir(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1137,14 +1313,12 @@ static void test_2_ident_strings_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1167,6 +1341,7 @@ static void test_3_ident_strings_hwe_dir(void **state)
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "devices");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
@@ -1181,14 +1356,13 @@ static void test_3_ident_strings_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
-	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER, chk_hp.value);
-	free_path(pp);
+	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
+			 chk_hp.value);
 
 	FREE_CONFIG(_conf);
 }
@@ -1212,6 +1386,7 @@ static void test_2_ident_self_matching_re_hwe_dir(void **state)
 	const struct key_value kv2[] = { vnd__oo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1220,14 +1395,12 @@ static void test_2_ident_self_matching_re_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1249,6 +1422,7 @@ static void test_2_ident_self_matching_re_hwe(void **state)
 	const struct key_value kv2[] = { vnd__oo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1257,15 +1431,13 @@ static void test_2_ident_self_matching_re_hwe(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1288,6 +1460,7 @@ static void test_2_ident_not_self_matching_re_hwe_dir(void **state)
 	const struct key_value kv2[] = { vnd_t_oo, prd_bar, prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1296,15 +1469,13 @@ static void test_2_ident_not_self_matching_re_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/* foo:bar matches both, but only kv2 is seen */
-	pp = mock_path(vnd_foo.value, prd_bar.value);
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1333,6 +1504,7 @@ static void test_2_matching_res_hwe_dir(void **state)
 					 prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1341,25 +1513,22 @@ static void test_2_matching_res_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/* foo:bay matches k1 and k2 */
-	pp = mock_path(vnd_foo.value, "bay");
+	pp = mock_path_flags(vnd_foo.value, "bay", USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
-	free_path(pp);
 
 	/*
 	 * foo:baz matches k2 only. Yet it sees the value from k1,
 	 * because k1 has beem merged into k2.
 	 */
-	pp = mock_path(vnd_foo.value, prd_baz.value);
+	pp = mock_path_flags(vnd_foo.value, prd_baz.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 chk_hp.value, DEFAULT_CHECKER);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1383,6 +1552,7 @@ static void test_2_nonmatching_res_hwe_dir(void **state)
 					 prio_hds, gui_foo };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
@@ -1391,17 +1561,15 @@ static void test_2_nonmatching_res_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-	free_path(pp);
 
 	/*
 	 * foo:baz matches k2 and k1. Yet it sees the value from k2 only.
 	 */
-	pp = mock_path(vnd_foo.value, prd_baz.value);
+	pp = mock_path_flags(vnd_foo.value, prd_baz.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
-	free_path(pp);
 
 	FREE_CONFIG(_conf);
 }
@@ -1412,10 +1580,10 @@ static void test_2_nonmatching_res_hwe_dir(void **state)
 static void test_blacklist(void **state)
 {
 	const struct hwt_state *hwt;
-	struct path *pp;
 	const struct key_value kv1[] = { vnd_foo, prd_bar };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
@@ -1423,26 +1591,23 @@ static void test_blacklist(void **state)
 	finish_config(hwt);
 	_conf = LOAD_CONFIG(hwt);
 
-	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	free_path(pp);
-
-	pp = mock_path(vnd_foo.value, prd_baz.value);
-	free_path(pp);
+	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	mock_path(vnd_foo.value, prd_baz.value);
 
 	FREE_CONFIG(_conf);
 }
 
 /*
  * Simple blacklist test with regex and exception
- */
+- */
 static void test_blacklist_regex(void **state)
 {
 	const struct hwt_state *hwt;
-	struct path *pp;
 	const struct key_value kv1[] = { vnd_foo, prd_ba_s };
 	const struct key_value kv2[] = { vnd_foo, prd_bar };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
@@ -1453,14 +1618,9 @@ static void test_blacklist_regex(void **state)
 	finish_config(hwt);
 	_conf = LOAD_CONFIG(hwt);
 
-	pp = mock_path(vnd_foo.value, prd_bar.value);
-	free_path(pp);
-
-	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	free_path(pp);
-
-	pp = mock_path(vnd_foo.value, prd_bam.value);
-	free_path(pp);
+	mock_path(vnd_foo.value, prd_bar.value);
+	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	mock_path(vnd_foo.value, prd_bam.value);
 
 	FREE_CONFIG(_conf);
 }
@@ -1472,11 +1632,11 @@ static void test_blacklist_regex(void **state)
 static void test_blacklist_regex_inv(void **state)
 {
 	const struct hwt_state *hwt;
-	struct path *pp;
 	const struct key_value kv1[] = { vnd_foo, prd_ba_s };
 	const struct key_value kv2[] = { vnd_foo, prd_bar };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv1), kv1);
@@ -1487,14 +1647,9 @@ static void test_blacklist_regex_inv(void **state)
 	finish_config(hwt);
 	_conf = LOAD_CONFIG(hwt);
 
-	pp = mock_path(vnd_foo.value, prd_bar.value);
-	free_path(pp);
-
-	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	free_path(pp);
-
-	pp = mock_path(vnd_foo.value, prd_bam.value);
-	free_path(pp);
+	mock_path(vnd_foo.value, prd_bar.value);
+	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	mock_path(vnd_foo.value, prd_bam.value);
 
 	FREE_CONFIG(_conf);
 }
@@ -1506,11 +1661,11 @@ static void test_blacklist_regex_inv(void **state)
 static void test_blacklist_regex_matching(void **state)
 {
 	const struct hwt_state *hwt;
-	struct path *pp;
 	const struct key_value kv1[] = { vnd_foo, prd_barx };
 	const struct key_value kv2[] = { vnd_foo, prd_bazy };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
@@ -1519,14 +1674,9 @@ static void test_blacklist_regex_matching(void **state)
 	finish_config(hwt);
 	_conf = LOAD_CONFIG(hwt);
 
-	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	free_path(pp);
-
-	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	free_path(pp);
-
-	pp = mock_path(vnd_foo.value, prd_bam.value);
-	free_path(pp);
+	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	mock_path(vnd_foo.value, prd_bam.value);
 
 	FREE_CONFIG(_conf);
 }
@@ -1539,22 +1689,17 @@ static void test_blacklist_regex_matching(void **state)
 static void test_product_blacklist(void **state)
 {
 	const struct hwt_state *hwt;
-	struct path *pp;
 	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_baz };
 	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bar };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
-	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	free_path(pp);
-
-	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	free_path(pp);
-
-	pp = mock_path(vnd_foo.value, prd_bam.value);
-	free_path(pp);
+	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
+	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	mock_path(vnd_foo.value, prd_bam.value);
 
 	FREE_CONFIG(_conf);
 }
@@ -1571,28 +1716,23 @@ static void test_product_blacklist(void **state)
 static void test_product_blacklist_matching(void **state)
 {
 	const struct hwt_state *hwt;
-	struct path *pp;
 	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_barx };
 	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bazy };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES(hwt, kv1, kv2);
 	_conf = LOAD_CONFIG(hwt);
 
-	pp = mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	free_path(pp);
-
+	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
 #if BROKEN == 1
 	condlog(1, "%s: WARNING: broken blacklist test on line %d",
 		__func__, __LINE__+1);
-	pp = mock_path(vnd_foo.value, prd_baz.value);
-	free_path(pp);
+	mock_path(vnd_foo.value, prd_baz.value);
 #else
-	pp = mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	free_path(pp);
+	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
 #endif
-	pp = mock_path(vnd_foo.value, prd_bam.value);
-	free_path(pp);
+	mock_path(vnd_foo.value, prd_bam.value);
 
 	FREE_CONFIG(_conf);
 }
@@ -1612,6 +1752,7 @@ static void test_multipath_config(void **state)
 	const struct key_value kvp[] = { vnd_foo, prd_bar, prio_emc, uid_baz };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "devices");
 	write_section(hwt->conf_dir_file[0], "device", ARRAY_SIZE(kvp), kvp);
@@ -1629,7 +1770,6 @@ static void test_multipath_config(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_rdac.value);
 	assert_int_equal(mp->minio, atoi(minio_99.value));
 	TEST_PROP(pp->uid_attribute, uid_baz.value);
-	free_multipath(mp, FREE_PATHS);
 
 	/* test different wwid */
 	pp = mock_path_wwid(vnd_foo.value, prd_bar.value, default_wwid_1);
@@ -1639,7 +1779,6 @@ static void test_multipath_config(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
 	TEST_PROP(pp->uid_attribute, uid_baz.value);
-	free_multipath(mp, FREE_PATHS);
 
 	FREE_CONFIG(_conf);
 }
@@ -1658,6 +1797,7 @@ static void test_multipath_config_2(void **state)
 	const struct key_value kv2[] = { wwid_test, minio_99, npr_37 };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "multipaths");
 	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv1), kv1);
@@ -1680,7 +1820,6 @@ static void test_multipath_config_2(void **state)
 	assert_int_equal(mp->minio, atoi(minio_99.value));
 	assert_int_equal(mp->no_path_retry, atoi(npr_37.value));
 #endif
-	free_multipath(mp, FREE_PATHS);
 
 	FREE_CONFIG(_conf);
 }
@@ -1699,6 +1838,7 @@ static void test_multipath_config_3(void **state)
 	const struct key_value kv2[] = { wwid_test, minio_99, npr_37 };
 
 	hwt = CHECK_STATE(state);
+	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "multipaths");
 	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv1), kv1);
@@ -1721,7 +1861,6 @@ static void test_multipath_config_3(void **state)
 	assert_int_equal(mp->minio, atoi(minio_99.value));
 	assert_int_equal(mp->no_path_retry, atoi(npr_37.value));
 #endif
-	free_multipath(mp, FREE_PATHS);
 
 	FREE_CONFIG(_conf);
 }
@@ -1729,11 +1868,11 @@ static void test_multipath_config_3(void **state)
 static int test_hwtable(void)
 {
 	const struct CMUnitTest tests[] = {
-		cmocka_unit_test(test_sanity_globals),
+	cmocka_unit_test(test_sanity_globals),
 		cmocka_unit_test(test_internal_nvme),
 		cmocka_unit_test(test_string_hwe),
 		cmocka_unit_test(test_regex_hwe),
-		cmocka_unit_test(test_regex_string_hwe),
+		cmocka_unit_test(test_regex_string_hwe), 
 		cmocka_unit_test(test_regex_string_hwe_dir),
 		cmocka_unit_test(test_regex_2_strings_hwe_dir),
 		cmocka_unit_test(test_string_regex_hwe_dir),

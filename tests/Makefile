@@ -19,8 +19,9 @@ all:	$(TESTS:%=%.out)
 # XYZ-test_LIBDEPS: Additional libs to link for this test
 
 dmevents-test_LIBDEPS = -lpthread -ldevmapper -lurcu
-hwtable-test_OBJDEPS := ../libmultipath/discovery.o ../libmultipath/structs.o
-hwtable-test_LIBDEPS := -ludev -lpthread
+hwtable-test_OBJDEPS := ../libmultipath/discovery.o ../libmultipath/blacklist.o \
+	../libmultipath/prio.o ../libmultipath/callout.o ../libmultipath/structs.o
+hwtable-test_LIBDEPS := -ludev -lpthread -ldl
 
 %.out:	%-test
 	@echo == running $< ==
