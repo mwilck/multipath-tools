@@ -1340,6 +1340,56 @@ static int setup_blacklist_regex_matching(void **state)
 }
 
 /*
+ * Test for blacklisting by WWID
+ *
+ * Note that default_wwid is a substring of default_wwid_1. Because
+ * matching is done by regex, both paths are blacklisted.
+ */
+static void test_blacklist_wwid(const struct hwt_state *hwt)
+{
+	mock_path_flags(vnd_foo.value, prd_bar.value, BL_BY_WWID);
+	mock_path_wwid_flags(vnd_foo.value, prd_baz.value, default_wwid_1,
+			     BL_BY_WWID);
+}
+
+static int setup_blacklist_wwid(void **state)
+{
+	const struct key_value kv[] = { wwid_test };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	begin_config(hwt);
+	write_section(hwt->config_file, "blacklist", ARRAY_SIZE(kv), kv);
+	finish_config(hwt);
+	SET_TEST_FUNC(hwt, test_blacklist_wwid);
+	return 0;
+}
+
+/*
+ * Test for blacklisting by WWID
+ *
+ * Here the blacklist contains only default_wwid_1. Thus the path
+ * with default_wwid is NOT blacklisted.
+ */
+static void test_blacklist_wwid_1(const struct hwt_state *hwt)
+{
+	mock_path(vnd_foo.value, prd_bar.value);
+	mock_path_wwid_flags(vnd_foo.value, prd_baz.value, default_wwid_1,
+			     BL_BY_WWID);
+}
+
+static int setup_blacklist_wwid_1(void **state)
+{
+	const struct key_value kv[] = { { _wwid, default_wwid_1 }, };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	begin_config(hwt);
+	write_section(hwt->config_file, "blacklist", ARRAY_SIZE(kv), kv);
+	finish_config(hwt);
+	SET_TEST_FUNC(hwt, test_blacklist_wwid_1);
+	return 0;
+}
+
+/*
  * Test for product_blacklist. Two entries blacklisting each other.
  *
  * Expected: Both are blacklisted.
@@ -1556,6 +1606,8 @@ static int test_hwtable(void)
 		cmocka_unit_test_setup(test_driver,
 				       setup_2_nonmatching_res_hwe_dir),
 		cmocka_unit_test_setup(test_driver, setup_blacklist),
+		cmocka_unit_test_setup(test_driver, setup_blacklist_wwid),
+		cmocka_unit_test_setup(test_driver, setup_blacklist_wwid_1),
 		cmocka_unit_test_setup(test_driver, setup_blacklist_regex),
 		cmocka_unit_test_setup(test_driver, setup_blacklist_regex_inv),
 		cmocka_unit_test_setup(test_driver,
