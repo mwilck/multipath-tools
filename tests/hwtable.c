@@ -397,6 +397,8 @@ static const char _no_path_retry[] = "no_path_retry";
 static const struct key_value vnd_foo = { _vendor, "foo" };
 static const struct key_value prd_bar = { _product, "bar" };
 static const struct key_value prd_bam = { _product, "bam" };
+static const struct key_value prd_baq = { _product, "\"bar\"" };
+static const struct key_value prd_baqq = { _product, "\"\"bar\"\"" };
 static const struct key_value prd_barz = { _product, "barz" };
 static const struct key_value vnd_boo = { _vendor, "boo" };
 static const struct key_value prd_baz = { _product, "baz" };
@@ -508,6 +510,44 @@ static int setup_internal_nvme(void **state)
 	WRITE_EMPTY_CONF(hwt);
 	SET_TEST_FUNC(hwt, test_internal_nvme);
 
+	return 0;
+}
+
+/*
+ * Device section with a simple entry qith double quotes ('foo:"bar"')
+ */
+#if BROKEN
+static void test_quoted_hwe(void **state)
+#else
+static void test_quoted_hwe(const struct hwt_state *hwt)
+#endif
+{
+	struct path *pp;
+#if BROKEN
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	_conf = LOAD_CONFIG(hwt);
+#endif
+	/* foo:"bar" matches */
+	pp = mock_path(vnd_foo.value, prd_baq.value);
+	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
+
+	/* foo:bar doesn't match */
+	pp = mock_path(vnd_foo.value, prd_bar.value);
+	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
+}
+
+static int setup_quoted_hwe(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+	const struct key_value kv[] = { vnd_foo, prd_baqq, prio_emc };
+
+	WRITE_ONE_DEVICE(hwt, kv);
+#if BROKEN
+	condlog(0, "%s: WARNING: skipping conf reload test", __func__);
+#else
+	SET_TEST_FUNC(hwt, test_quoted_hwe);
+#endif
 	return 0;
 }
 
@@ -1580,6 +1620,11 @@ static int test_hwtable(void)
 		cmocka_unit_test(test_sanity_globals),
 		cmocka_unit_test_setup(test_driver, setup_internal_nvme),
 		cmocka_unit_test_setup(test_driver, setup_string_hwe),
+#if BROKEN
+		cmocka_unit_test_setup(test_quoted_hwe, setup_quoted_hwe),
+#else
+		cmocka_unit_test_setup(test_driver, setup_quoted_hwe),
+#endif
 		cmocka_unit_test_setup(test_driver, setup_regex_hwe),
 		cmocka_unit_test_setup(test_driver, setup_regex_string_hwe),
 		cmocka_unit_test_setup(test_driver, setup_regex_string_hwe_dir),
