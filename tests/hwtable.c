@@ -42,7 +42,14 @@ struct hwt_state {
 	FILE *config_file;
 	FILE *conf_dir_file[N_CONF_FILES];
 	struct vectors *vecs;
+	void (*test)(const struct hwt_state *);
+	const char *test_name;
 };
+
+#define SET_TEST_FUNC(hwt, func) do {		\
+		hwt->test = func;		\
+		hwt->test_name = #func;		\
+	} while (0)
 
 static struct config *_conf;
 struct udev *udev;
@@ -423,6 +430,25 @@ static const struct key_value npr_queue = { _no_path_retry, "queue" };
 /***** BEGIN TESTS SECTION *****/
 
 /*
+ * Run the given test case. This will later be extended
+ * to run the test several times in a row.
+ *
+ * Expected: test passes every time.
+ */
+static void test_driver(void **state)
+{
+	const struct hwt_state *hwt;
+
+	hwt = CHECK_STATE(state);
+	condlog(1, "### %s: testing: %s", __func__, hwt->test_name);
+	_conf = LOAD_CONFIG(hwt);
+	hwt->test(hwt);
+
+	reset_vecs(hwt->vecs);
+	FREE_CONFIG(_conf);
+}
+
+/*
  * Sanity check for the test itself, because defaults may be changed
  * in libmultipath.
  *
@@ -444,16 +470,10 @@ static void test_sanity_globals(void **state)
  * Regression test for internal hwtable. NVME is an example of two entries
  * in the built-in hwtable, one if which matches a subset of the other.
  */
-static void test_internal_nvme(void **state)
+static void test_internal_nvme(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
 	struct multipath *mp;
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_EMPTY_CONF(hwt);
-	_conf = LOAD_CONFIG(hwt);
 
 	/*
 	 * Generic NVMe: expect defaults for pgpolicy and no_path_retry
@@ -479,22 +499,24 @@ static void test_internal_nvme(void **state)
 	assert_int_equal(mp->pgpolicy, MULTIBUS);
 	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
 	assert_int_equal(mp->retain_hwhandler, RETAIN_HWHANDLER_OFF);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_internal_nvme(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_EMPTY_CONF(hwt);
+	SET_TEST_FUNC(hwt, test_internal_nvme);
+
+	return 0;
 }
 
 /*
  * Device section with a single simple entry ("foo:bar")
  */
-static void test_string_hwe(void **state)
+static void test_string_hwe(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv[] = { vnd_foo, prd_bar, prio_emc };
-
-	hwt = CHECK_STATE(state);
-	WRITE_ONE_DEVICE(hwt, kv);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar matches */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
@@ -507,23 +529,24 @@ static void test_string_hwe(void **state)
 	/* boo:bar doesn't match */
 	pp = mock_path(vnd_boo.value, prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_string_hwe(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+	const struct key_value kv[] = { vnd_foo, prd_bar, prio_emc };
+
+	WRITE_ONE_DEVICE(hwt, kv);
+	SET_TEST_FUNC(hwt, test_string_hwe);
+	return 0;
 }
 
 /*
  * Device section with a single regex entry ("^.foo:(bar|baz|ba\.)$")
  */
-static void test_regex_hwe(void **state)
+static void test_regex_hwe(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv[] = { vnd_t_oo, prd_ba_s, prio_emc };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_ONE_DEVICE(hwt, kv);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar matches */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
@@ -544,8 +567,16 @@ static void test_regex_hwe(void **state)
 	/* bboo:bar doesn't match */
 	pp = mock_path("bboo", prd_bar.value);
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_regex_hwe(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+	const struct key_value kv[] = { vnd_t_oo, prd_ba_s, prio_emc };
+
+	WRITE_ONE_DEVICE(hwt, kv);
+	SET_TEST_FUNC(hwt, test_regex_hwe);
+	return 0;
 }
 
 /*
@@ -559,17 +590,9 @@ static void test_regex_hwe(void **state)
  * Current: These entries are currently _NOT_ merged, therefore getuid is
  * default for kv1 matches, and checker is default on kv2 matches.
  */
-static void test_regex_string_hwe(void **state)
+static void test_regex_string_hwe(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_t_oo, prd_ba_s, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz matches kv1 */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -605,8 +628,17 @@ static void test_regex_string_hwe(void **state)
 	 */
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_regex_string_hwe(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+	const struct key_value kv1[] = { vnd_t_oo, prd_ba_s, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+
+	WRITE_TWO_DEVICES(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_regex_string_hwe);
+	return 0;
 }
 
 /*
@@ -622,17 +654,9 @@ static void test_regex_string_hwe(void **state)
  *
  * Current: behaves as expected.
  */
-static void test_regex_string_hwe_dir(void **state)
+static void test_regex_string_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_t_oo, prd_ba_s, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz matches kv1 */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -665,8 +689,17 @@ static void test_regex_string_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	/* This time it's merged */
 	TEST_PROP(pp->checker.name, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_regex_string_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_t_oo, prd_ba_s, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_regex_string_hwe_dir);
+	return 0;
 }
 
 /*
@@ -677,25 +710,9 @@ static void test_regex_string_hwe_dir(void **state)
  * Expected: Devices matching kv3 get props from all, devices matching
  * kv2 from kv2 and kv1, and devices matching kv1 only just from kv1.
  */
-static void test_regex_2_strings_hwe_dir(void **state)
+static void test_regex_2_strings_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_foo, prd_ba_, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, uid_baz };
-	const struct key_value kv3[] = { vnd_foo, prd_barz,
-					 prio_rdac, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	begin_config(hwt);
-	begin_section_all(hwt, "devices");
-	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
-	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv2), kv2);
-	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv3), kv3);
-	end_section_all(hwt);
-	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz matches kv1 */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -724,8 +741,25 @@ static void test_regex_2_strings_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->uid_attribute, NULL);
 	TEST_PROP(pp->checker.name, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_regex_2_strings_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_ba_, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, uid_baz };
+	const struct key_value kv3[] = { vnd_foo, prd_barz,
+					 prio_rdac, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	begin_config(hwt);
+	begin_section_all(hwt, "devices");
+	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
+	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv2), kv2);
+	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv3), kv3);
+	end_section_all(hwt);
+	finish_config(hwt);
+	SET_TEST_FUNC(hwt, test_regex_2_strings_hwe_dir);
+	return 0;
 }
 
 /*
@@ -738,17 +772,9 @@ static void test_regex_2_strings_hwe_dir(void **state)
  * Current: kv2 never matches, because kv1 is more generic and encountered
  * first; thus properties from kv2 aren't used.
  */
-static void test_string_regex_hwe_dir(void **state)
+static void test_string_regex_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_t_oo, prd_ba_s, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv2, kv1);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar matches kv2 and kv1 */
 	pp = mock_path_flags(vnd_foo.value, prd_bar.value,
@@ -780,8 +806,17 @@ static void test_string_regex_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
 	TEST_PROP(pp->getuid, NULL);
 	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_string_regex_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_t_oo, prd_ba_s, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv2, kv1);
+	SET_TEST_FUNC(hwt, test_string_regex_hwe_dir);
+	return 0;
 }
 
 /*
@@ -794,17 +829,9 @@ static void test_string_regex_hwe_dir(void **state)
  *
  * Current: devices get props from kv2 only.
  */
-static void test_2_ident_strings_hwe(void **state)
+static void test_2_ident_strings_hwe(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -818,8 +845,17 @@ static void test_2_ident_strings_hwe(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
 			 chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_ident_strings_hwe(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_ident_strings_hwe);
+	return 0;
 }
 
 /*
@@ -829,22 +865,9 @@ static void test_2_ident_strings_hwe(void **state)
  *
  * Expected: matching devices get props from both, kv2 taking precedence.
  */
-static void test_2_ident_strings_both_dir(void **state)
+static void test_2_ident_strings_both_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	begin_config(hwt);
-	begin_section_all(hwt, "devices");
-	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv1), kv1);
-	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv2), kv2);
-	end_section_all(hwt);
-	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -858,27 +881,57 @@ static void test_2_ident_strings_both_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
 			 chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_ident_strings_both_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	begin_config(hwt);
+	begin_section_all(hwt, "devices");
+	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv1), kv1);
+	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	SET_TEST_FUNC(hwt, test_2_ident_strings_both_dir);
+	return 0;
 }
 
 /*
  * Two identical device entries kv1 and kv2, trival regex ("string").
  * Both are added to an extra config file.
- * An empty entry with the same string exists in the main config file.
+ * An empty entry kv0 with the same string exists in the main config file.
  *
  * Expected: matching devices get props from both, kv2 taking precedence.
  */
-static void test_2_ident_strings_both_dir_w_prev(void **state)
+static void test_2_ident_strings_both_dir_w_prev(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
+
+	/* foo:baz doesn't match */
+	pp = mock_path(vnd_foo.value, prd_baz.value);
+	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
+	TEST_PROP(pp->getuid, NULL);
+	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
+
+	/* foo:bar matches both */
+	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
+	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
+	TEST_PROP(pp->getuid, gui_foo.value);
+	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
+			 chk_hp.value);
+}
+
+static int setup_2_ident_strings_both_dir_w_prev(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+
 	const struct key_value kv0[] = { vnd_foo, prd_bar };
 	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
 	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "devices");
 	write_device(hwt->config_file, ARRAY_SIZE(kv0), kv0);
@@ -886,22 +939,8 @@ static void test_2_ident_strings_both_dir_w_prev(void **state)
 	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv2), kv2);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
-
-	/* foo:baz doesn't match */
-	pp = mock_path(vnd_foo.value, prd_baz.value);
-	TEST_PROP(prio_name(&pp->prio), DEFAULT_PRIO);
-	TEST_PROP(pp->getuid, NULL);
-	TEST_PROP(pp->checker.name, DEFAULT_CHECKER);
-
-	/* foo:bar matches both */
-	pp = mock_path_flags(vnd_foo.value, prd_bar.value, USE_GETUID);
-	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
-	TEST_PROP(pp->getuid, gui_foo.value);
-	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
-			 chk_hp.value);
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_2_ident_strings_both_dir_w_prev);
+	return 0;
 }
 
 /*
@@ -915,17 +954,9 @@ static void test_2_ident_strings_both_dir_w_prev(void **state)
  *
  * Current: behaves as expected.
  */
-static void test_2_ident_strings_hwe_dir(void **state)
+static void test_2_ident_strings_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -938,8 +969,17 @@ static void test_2_ident_strings_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_ident_strings_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_ident_strings_hwe_dir);
+	return 0;
 }
 
 /*
@@ -951,24 +991,9 @@ static void test_2_ident_strings_hwe_dir(void **state)
  * Current: kv0 and kv1 are merged into kv0, and then ignored because kv2 takes
  * precedence. Thus the presence of the empty kv0 changes how kv1 is treated.
  */
-static void test_3_ident_strings_hwe_dir(void **state)
+static void test_3_ident_strings_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv0[] = { vnd_foo, prd_bar };
-	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	begin_config(hwt);
-	begin_section_all(hwt, "devices");
-	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
-	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv0), kv0);
-	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv2), kv2);
-	end_section_all(hwt);
-	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -982,8 +1007,24 @@ static void test_3_ident_strings_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name, DEFAULT_CHECKER,
 			 chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_3_ident_strings_hwe_dir(void **state)
+{
+	const struct key_value kv0[] = { vnd_foo, prd_bar };
+	const struct key_value kv1[] = { vnd_foo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	begin_config(hwt);
+	begin_section_all(hwt, "devices");
+	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
+	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv0), kv0);
+	write_device(hwt->conf_dir_file[1], ARRAY_SIZE(kv2), kv2);
+	end_section_all(hwt);
+	finish_config(hwt);
+	SET_TEST_FUNC(hwt, test_3_ident_strings_hwe_dir);
+	return 0;
 }
 
 /*
@@ -997,17 +1038,9 @@ static void test_3_ident_strings_hwe_dir(void **state)
  *
  * Current: behaves as expected.
  */
-static void test_2_ident_self_matching_re_hwe_dir(void **state)
+static void test_2_ident_self_matching_re_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd__oo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd__oo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -1020,8 +1053,17 @@ static void test_2_ident_self_matching_re_hwe_dir(void **state)
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_ident_self_matching_re_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd__oo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd__oo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_ident_self_matching_re_hwe_dir);
+	return 0;
 }
 
 /*
@@ -1033,17 +1075,9 @@ static void test_2_ident_self_matching_re_hwe_dir(void **state)
  *
  * Current: Devices get properties from kv2 only (kv1 and kv2 are not merged).
  */
-static void test_2_ident_self_matching_re_hwe(void **state)
+static void test_2_ident_self_matching_re_hwe(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd__oo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd__oo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -1057,8 +1091,17 @@ static void test_2_ident_self_matching_re_hwe(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_ident_self_matching_re_hwe(void **state)
+{
+	const struct key_value kv1[] = { vnd__oo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd__oo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_ident_self_matching_re_hwe);
+	return 0;
 }
 
 /*
@@ -1071,17 +1114,10 @@ static void test_2_ident_self_matching_re_hwe(void **state)
  *
  * Current: devices get props from kv2 only.
  */
-static void test_2_ident_not_self_matching_re_hwe_dir(void **state)
+static void
+test_2_ident_not_self_matching_re_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_t_oo, prd_bar, prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_t_oo, prd_bar, prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:baz doesn't match */
 	pp = mock_path(vnd_foo.value, prd_baz.value);
@@ -1095,8 +1131,17 @@ static void test_2_ident_not_self_matching_re_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_ident_not_self_matching_re_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_t_oo, prd_bar, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_t_oo, prd_bar, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_ident_not_self_matching_re_hwe_dir);
+	return 0;
 }
 
 /*
@@ -1113,19 +1158,9 @@ static void test_2_ident_not_self_matching_re_hwe_dir(void **state)
  * Current: behaves as expected, except for devices that match only kv2.
  * Those get properties from kv1, too.
  */
-static void test_2_matching_res_hwe_dir(void **state)
+static void test_2_matching_res_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_foo, prd_barx,
-					 prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bazy,
-					 prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar matches k1 only */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
@@ -1139,17 +1174,23 @@ static void test_2_matching_res_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP(pp->checker.name, chk_hp.value);
 
-	/*
-	 * foo:baz matches k2 only. Yet it sees the value from k1,
-	 * because k1 has beem merged into k2.
-	 */
+	/* foo:baz matches k2 only. */
 	pp = mock_path_flags(vnd_foo.value, prd_baz.value, USE_GETUID);
 	TEST_PROP(prio_name(&pp->prio), prio_hds.value);
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 chk_hp.value, DEFAULT_CHECKER);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_matching_res_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_barx, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bazy, prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_matching_res_hwe_dir);
+	return 0;
 }
 
 /*
@@ -1161,19 +1202,9 @@ static void test_2_matching_res_hwe_dir(void **state)
  *
  * Current: matching devices get properties from kv2 only.
  */
-static void test_2_nonmatching_res_hwe_dir(void **state)
+static void test_2_nonmatching_res_hwe_dir(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
-	const struct key_value kv1[] = { vnd_foo, prd_bazy,
-					 prio_emc, chk_hp };
-	const struct key_value kv2[] = { vnd_foo, prd_bazy1,
-					 prio_hds, gui_foo };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
 
 	/* foo:bar doesn't match */
 	pp = mock_path(vnd_foo.value, prd_bar.value);
@@ -1189,44 +1220,64 @@ static void test_2_nonmatching_res_hwe_dir(void **state)
 	TEST_PROP(pp->getuid, gui_foo.value);
 	TEST_PROP_BROKEN(_checker, pp->checker.name,
 			 DEFAULT_CHECKER, chk_hp.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_2_nonmatching_res_hwe_dir(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_bazy, prio_emc, chk_hp };
+	const struct key_value kv2[] = { vnd_foo, prd_bazy1,
+					 prio_hds, gui_foo };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES_W_DIR(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_2_nonmatching_res_hwe_dir);
+	return 0;
 }
 
 /*
  * Simple blacklist test.
+ *
+ * NOTE: test failures in blacklisting tests will manifest as cmocka errors
+ * "Could not get value to mock function XYZ", because pathinfo() takes
+ * different code paths for blacklisted devices.
  */
-static void test_blacklist(void **state)
+static void test_blacklist(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
-	const struct key_value kv1[] = { vnd_foo, prd_bar };
+	mock_path_flags(vnd_foo.value, prd_bar.value, BL_BY_DEVICE);
+	mock_path(vnd_foo.value, prd_baz.value);
+}
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
+static int setup_blacklist(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_bar };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
-
-	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	mock_path(vnd_foo.value, prd_baz.value);
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_blacklist);
+	return 0;
 }
 
 /*
  * Simple blacklist test with regex and exception
-- */
-static void test_blacklist_regex(void **state)
+ */
+static void test_blacklist_regex(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
+	mock_path(vnd_foo.value, prd_bar.value);
+	mock_path_flags(vnd_foo.value, prd_baz.value, BL_BY_DEVICE);
+	mock_path(vnd_foo.value, prd_bam.value);
+}
+
+static int setup_blacklist_regex(void **state)
+{
 	const struct key_value kv1[] = { vnd_foo, prd_ba_s };
 	const struct key_value kv2[] = { vnd_foo, prd_bar };
+	struct hwt_state *hwt = CHECK_STATE(state);
 
 	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
@@ -1235,27 +1286,20 @@ static void test_blacklist_regex(void **state)
 	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv2), kv2);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
-
-	mock_path(vnd_foo.value, prd_bar.value);
-	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	mock_path(vnd_foo.value, prd_bam.value);
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_blacklist_regex);
+	return 0;
 }
 
 /*
  * Simple blacklist test with regex and exception
  * config file order inverted wrt test_blacklist_regex
  */
-static void test_blacklist_regex_inv(void **state)
+static int setup_blacklist_regex_inv(void **state)
 {
-	const struct hwt_state *hwt;
 	const struct key_value kv1[] = { vnd_foo, prd_ba_s };
 	const struct key_value kv2[] = { vnd_foo, prd_bar };
+	struct hwt_state *hwt = CHECK_STATE(state);
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv1), kv1);
@@ -1264,40 +1308,35 @@ static void test_blacklist_regex_inv(void **state)
 	write_device(hwt->config_file, ARRAY_SIZE(kv2), kv2);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
-
-	mock_path(vnd_foo.value, prd_bar.value);
-	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	mock_path(vnd_foo.value, prd_bam.value);
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_blacklist_regex);
+	return 0;
 }
 
 /*
  * Simple blacklist test with regex and exception
  * config file order inverted wrt test_blacklist_regex
  */
-static void test_blacklist_regex_matching(void **state)
+static void test_blacklist_regex_matching(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
+	mock_path_flags(vnd_foo.value, prd_bar.value, BL_BY_DEVICE);
+	mock_path_flags(vnd_foo.value, prd_baz.value, BL_BY_DEVICE);
+	mock_path(vnd_foo.value, prd_bam.value);
+}
+
+static int setup_blacklist_regex_matching(void **state)
+{
 	const struct key_value kv1[] = { vnd_foo, prd_barx };
 	const struct key_value kv2[] = { vnd_foo, prd_bazy };
+	struct hwt_state *hwt = CHECK_STATE(state);
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "blacklist");
 	write_device(hwt->config_file, ARRAY_SIZE(kv1), kv1);
 	write_device(hwt->conf_dir_file[0], ARRAY_SIZE(kv2), kv2);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
-
-	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	mock_path(vnd_foo.value, prd_bam.value);
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_blacklist_regex_matching);
+	return 0;
 }
 
 /*
@@ -1305,22 +1344,22 @@ static void test_blacklist_regex_matching(void **state)
  *
  * Expected: Both are blacklisted.
  */
-static void test_product_blacklist(void **state)
+static void test_product_blacklist(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
+	mock_path_flags(vnd_foo.value, prd_baz.value, BL_BY_DEVICE);
+	mock_path_flags(vnd_foo.value, prd_bar.value, BL_BY_DEVICE);
+	mock_path(vnd_foo.value, prd_bam.value);
+}
+
+static int setup_product_blacklist(void **state)
+{
 	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_baz };
 	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bar };
+	struct hwt_state *hwt = CHECK_STATE(state);
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	WRITE_TWO_DEVICES(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
-
-	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
-	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
-	mock_path(vnd_foo.value, prd_bam.value);
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_product_blacklist);
+	return 0;
 }
 
 /*
@@ -1328,32 +1367,29 @@ static void test_product_blacklist(void **state)
  * This is a pathological example.
  *
  * Expected: "foo:bar", "foo:baz" are blacklisted.
- *
- * Current: "foo:baz" is not blacklisted, because the two regexes are
- * merged into one.
  */
-static void test_product_blacklist_matching(void **state)
+static void test_product_blacklist_matching(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
-	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_barx };
-	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bazy };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	WRITE_TWO_DEVICES(hwt, kv1, kv2);
-	_conf = LOAD_CONFIG(hwt);
-
-	mock_path_blacklisted(vnd_foo.value, prd_bar.value);
+	mock_path_flags(vnd_foo.value, prd_bar.value, BL_BY_DEVICE);
 #if BROKEN == 1
 	condlog(1, "%s: WARNING: broken blacklist test on line %d",
-		__func__, __LINE__+1);
+		__func__, __LINE__ + 1);
 	mock_path(vnd_foo.value, prd_baz.value);
 #else
 	mock_path_blacklisted(vnd_foo.value, prd_baz.value);
 #endif
 	mock_path(vnd_foo.value, prd_bam.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_product_blacklist_matching(void **state)
+{
+	const struct key_value kv1[] = { vnd_foo, prd_bar, bl_barx };
+	const struct key_value kv2[] = { vnd_foo, prd_baz, bl_bazy };
+	struct hwt_state *hwt = CHECK_STATE(state);
+
+	WRITE_TWO_DEVICES(hwt, kv1, kv2);
+	SET_TEST_FUNC(hwt, test_product_blacklist_matching);
+	return 0;
 }
 
 /*
@@ -1362,29 +1398,13 @@ static void test_product_blacklist_matching(void **state)
  * Expected: properties, including pp->prio, are taken from multipath
  * section.
  */
-static void test_multipath_config(void **state)
+static void test_multipath_config(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
 	struct multipath *mp;
-	const struct key_value kvm[] = { wwid_test, prio_rdac, minio_99 };
-	const struct key_value kvp[] = { vnd_foo, prd_bar, prio_emc, uid_baz };
-
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
-	begin_config(hwt);
-	begin_section_all(hwt, "devices");
-	write_section(hwt->conf_dir_file[0], "device", ARRAY_SIZE(kvp), kvp);
-	end_section_all(hwt);
-	begin_section_all(hwt, "multipaths");
-	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kvm), kvm);
-	end_section_all(hwt);
-	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
 
 	pp = mock_path(vnd_foo.value, prd_bar.value);
 	mp = mock_multipath(pp);
-	assert_ptr_not_equal(mp, NULL);
 	assert_ptr_not_equal(mp->mpe, NULL);
 	TEST_PROP(prio_name(&pp->prio), prio_rdac.value);
 	assert_int_equal(mp->minio, atoi(minio_99.value));
@@ -1393,37 +1413,84 @@ static void test_multipath_config(void **state)
 	/* test different wwid */
 	pp = mock_path_wwid(vnd_foo.value, prd_bar.value, default_wwid_1);
 	mp = mock_multipath(pp);
-	assert_ptr_not_equal(mp, NULL);
-	assert_ptr_equal(mp->mpe, NULL);
+	// assert_ptr_equal(mp->mpe, NULL);
 	TEST_PROP(prio_name(&pp->prio), prio_emc.value);
 	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
 	TEST_PROP(pp->uid_attribute, uid_baz.value);
+}
 
-	FREE_CONFIG(_conf);
+static int setup_multipath_config(void **state)
+{
+	struct hwt_state *hwt = CHECK_STATE(state);
+	const struct key_value kvm[] = { wwid_test, prio_rdac, minio_99 };
+	const struct key_value kvp[] = { vnd_foo, prd_bar, prio_emc, uid_baz };
+
+	begin_config(hwt);
+	begin_section_all(hwt, "devices");
+	write_section(hwt->conf_dir_file[0], "device", ARRAY_SIZE(kvp), kvp);
+	end_section_all(hwt);
+	begin_section_all(hwt, "multipaths");
+	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kvm), kvm);
+	end_section_all(hwt);
+	finish_config(hwt);
+	SET_TEST_FUNC(hwt, test_multipath_config);
+	return 0;
 }
 
 /*
  * Basic test for multipath-based configuration. Two sections for the same wwid.
  *
- * Expected: properties are taken from both multipath sections.
+ * Expected: properties are taken from both multipath sections, later taking
+ * precedence
+ *
+ * Current: gets properties from first entry only.
  */
-static void test_multipath_config_2(void **state)
+static void test_multipath_config_2(const struct hwt_state *hwt)
 {
-	const struct hwt_state *hwt;
 	struct path *pp;
 	struct multipath *mp;
+
+	pp = mock_path(vnd_foo.value, prd_bar.value);
+	mp = mock_multipath(pp);
+	assert_ptr_not_equal(mp, NULL);
+	assert_ptr_not_equal(mp->mpe, NULL);
+	TEST_PROP(prio_name(&pp->prio), prio_rdac.value);
+#if BROKEN
+	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
+	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
+	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
+	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
+#else
+	assert_int_equal(mp->minio, atoi(minio_99.value));
+	assert_int_equal(mp->no_path_retry, atoi(npr_37.value));
+#endif
+}
+
+static int setup_multipath_config_2(void **state)
+{
 	const struct key_value kv1[] = { wwid_test, prio_rdac, npr_queue };
 	const struct key_value kv2[] = { wwid_test, minio_99, npr_37 };
+	struct hwt_state *hwt = CHECK_STATE(state);
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "multipaths");
 	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv1), kv1);
 	write_section(hwt->conf_dir_file[1], "multipath", ARRAY_SIZE(kv2), kv2);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
+	SET_TEST_FUNC(hwt, test_multipath_config_2);
+	return 0;
+}
+
+/*
+ * Same as test_multipath_config_2, both entries in the same config file.
+ *
+ * Expected: properties are taken from both multipath sections.
+ */
+static void test_multipath_config_3(const struct hwt_state *hwt)
+{
+	struct path *pp;
+	struct multipath *mp;
 
 	pp = mock_path(vnd_foo.value, prd_bar.value);
 	mp = mock_multipath(pp);
@@ -1439,81 +1506,66 @@ static void test_multipath_config_2(void **state)
 	assert_int_equal(mp->minio, atoi(minio_99.value));
 	assert_int_equal(mp->no_path_retry, atoi(npr_37.value));
 #endif
-
-	FREE_CONFIG(_conf);
 }
 
-/*
- * Same as test_multipath_config_2, both entries in the same config file.
- *
- * Expected: properties, are taken from both multipath sections.
- */
-static void test_multipath_config_3(void **state)
+static int setup_multipath_config_3(void **state)
 {
-	const struct hwt_state *hwt;
-	struct path *pp;
-	struct multipath *mp;
 	const struct key_value kv1[] = { wwid_test, prio_rdac, npr_queue };
 	const struct key_value kv2[] = { wwid_test, minio_99, npr_37 };
+	struct hwt_state *hwt = CHECK_STATE(state);
 
-	hwt = CHECK_STATE(state);
-	reset_vecs(hwt->vecs);
 	begin_config(hwt);
 	begin_section_all(hwt, "multipaths");
 	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv1), kv1);
 	write_section(hwt->config_file, "multipath", ARRAY_SIZE(kv2), kv2);
 	end_section_all(hwt);
 	finish_config(hwt);
-	_conf = LOAD_CONFIG(hwt);
-
-	pp = mock_path(vnd_foo.value, prd_bar.value);
-	mp = mock_multipath(pp);
-	assert_ptr_not_equal(mp, NULL);
-	assert_ptr_not_equal(mp->mpe, NULL);
-	TEST_PROP(prio_name(&pp->prio), prio_rdac.value);
-#if BROKEN
-	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
-	assert_int_equal(mp->minio, DEFAULT_MINIO_RQ);
-	condlog(1, "%s: WARNING: broken test on %d", __func__, __LINE__ + 1);
-	assert_int_equal(mp->no_path_retry, NO_PATH_RETRY_QUEUE);
-#else
-	assert_int_equal(mp->minio, atoi(minio_99.value));
-	assert_int_equal(mp->no_path_retry, atoi(npr_37.value));
-#endif
-
-	FREE_CONFIG(_conf);
+	SET_TEST_FUNC(hwt, test_multipath_config_3);
+	return 0;
 }
 
 static int test_hwtable(void)
 {
 	const struct CMUnitTest tests[] = {
-	cmocka_unit_test(test_sanity_globals),
-		cmocka_unit_test(test_internal_nvme),
-		cmocka_unit_test(test_string_hwe),
-		cmocka_unit_test(test_regex_hwe),
-		cmocka_unit_test(test_regex_string_hwe), 
-		cmocka_unit_test(test_regex_string_hwe_dir),
-		cmocka_unit_test(test_regex_2_strings_hwe_dir),
-		cmocka_unit_test(test_string_regex_hwe_dir),
-		cmocka_unit_test(test_2_ident_strings_hwe),
-		cmocka_unit_test(test_2_ident_strings_both_dir),
-		cmocka_unit_test(test_2_ident_strings_both_dir_w_prev),
-		cmocka_unit_test(test_2_ident_strings_hwe_dir),
-		cmocka_unit_test(test_3_ident_strings_hwe_dir),
-		cmocka_unit_test(test_2_ident_self_matching_re_hwe),
-		cmocka_unit_test(test_2_ident_self_matching_re_hwe_dir),
-		cmocka_unit_test(test_2_ident_not_self_matching_re_hwe_dir),
-		cmocka_unit_test(test_2_matching_res_hwe_dir),
-		cmocka_unit_test(test_2_nonmatching_res_hwe_dir),
-		cmocka_unit_test(test_blacklist),
-		cmocka_unit_test(test_blacklist_regex),
-		cmocka_unit_test(test_blacklist_regex_inv),
-		cmocka_unit_test(test_blacklist_regex_matching),
-		cmocka_unit_test(test_product_blacklist),
-		cmocka_unit_test(test_product_blacklist_matching),
-		cmocka_unit_test(test_multipath_config),
-		cmocka_unit_test(test_multipath_config_2),
-		cmocka_unit_test(test_multipath_config_3),
+		cmocka_unit_test(test_sanity_globals),
+		cmocka_unit_test_setup(test_driver, setup_internal_nvme),
+		cmocka_unit_test_setup(test_driver, setup_string_hwe),
+		cmocka_unit_test_setup(test_driver, setup_regex_hwe),
+		cmocka_unit_test_setup(test_driver, setup_regex_string_hwe),
+		cmocka_unit_test_setup(test_driver, setup_regex_string_hwe_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_regex_2_strings_hwe_dir),
+		cmocka_unit_test_setup(test_driver, setup_string_regex_hwe_dir),
+		cmocka_unit_test_setup(test_driver, setup_2_ident_strings_hwe),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_ident_strings_both_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_ident_strings_both_dir_w_prev),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_ident_strings_hwe_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_3_ident_strings_hwe_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_ident_self_matching_re_hwe_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_ident_self_matching_re_hwe),
+		cmocka_unit_test_setup(test_driver,
+				setup_2_ident_not_self_matching_re_hwe_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_matching_res_hwe_dir),
+		cmocka_unit_test_setup(test_driver,
+				       setup_2_nonmatching_res_hwe_dir),
+		cmocka_unit_test_setup(test_driver, setup_blacklist),
+		cmocka_unit_test_setup(test_driver, setup_blacklist_regex),
+		cmocka_unit_test_setup(test_driver, setup_blacklist_regex_inv),
+		cmocka_unit_test_setup(test_driver,
+				       setup_blacklist_regex_matching),
+		cmocka_unit_test_setup(test_driver, setup_product_blacklist),
+		cmocka_unit_test_setup(test_driver,
+		setup_product_blacklist_matching),
+		cmocka_unit_test_setup(test_driver, setup_multipath_config),
+		cmocka_unit_test_setup(test_driver, setup_multipath_config_2),
+		cmocka_unit_test_setup(test_driver, setup_multipath_config_3),
 	};
 
 	return cmocka_run_group_tests(tests, setup, teardown);
