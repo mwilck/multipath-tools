@@ -4,6 +4,7 @@
  * Copyright (c) 2005 Benjamin Marzinski, Redhat
  * Copyright (c) 2005 Edward Goggin, EMC
  */
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <sys/stat.h>
 #include <libdevmapper.h>
@@ -2593,30 +2594,70 @@ child (void * param)
 		}
 	}
 
-	lock(&vecs->lock);
-	conf = get_multipath_config();
-	if (conf->queue_without_daemon == QUE_NO_DAEMON_OFF)
-		vector_foreach_slot(vecs->mpvec, mpp, i)
-			dm_queue_if_no_path(mpp->alias, 0);
-	put_multipath_config(conf);
-	remove_maps_and_stop_waiters(vecs);
-	unlock(&vecs->lock);
+	condlog(2, "cancelling threads");
 
 	pthread_cancel(check_thr);
 	pthread_cancel(uevent_thr);
 	pthread_cancel(uxlsnr_thr);
 	pthread_cancel(uevq_thr);
 
-	pthread_join(check_thr, NULL);
-	pthread_join(uevent_thr, NULL);
-	pthread_join(uxlsnr_thr, NULL);
-	pthread_join(uevq_thr, NULL);
+	bool maps_removed = false;
+	do {
+		struct timespec tmo;
+		int qwd;
 
-	lock(&vecs->lock);
-	free_pathvec(vecs->pathvec, FREE_PATHS);
-	vecs->pathvec = NULL;
-	unlock(&vecs->lock);
+		clock_gettime(CLOCK_REALTIME, &tmo);
+		tmo.tv_sec += 5;
 
+		rc = timedlock(&vecs->lock, &tmo);
+		if (rc == 0) {
+			conf = get_multipath_config();
+			qwd = conf->queue_without_daemon;
+			put_multipath_config(conf);
+			if (qwd == QUE_NO_DAEMON_OFF)
+				vector_foreach_slot(vecs->mpvec, mpp, i)
+					dm_queue_if_no_path(mpp->alias, 0);
+			remove_maps_and_stop_waiters(vecs);
+			maps_removed = true;
+			unlock(&vecs->lock);
+		} else
+			condlog(0, "failed to take lock during exit");
+	} while (0);
+
+	do {
+		struct timespec tv;
+
+		clock_gettime(CLOCK_REALTIME, &tv);
+		tv.tv_sec += 4;
+		rc = pthread_timedjoin_np(uxlsnr_thr, NULL, &tv);
+		clock_gettime(CLOCK_REALTIME, &tv);
+		tv.tv_sec += 1;
+		rc |= pthread_timedjoin_np(uevent_thr, NULL, &tv);
+		clock_gettime(CLOCK_REALTIME, &tv);
+		tv.tv_sec += 1;
+		rc |= pthread_timedjoin_np(uevq_thr, NULL, &tv);
+		clock_gettime(CLOCK_REALTIME, &tv);
+		tv.tv_sec += 1;
+		rc |= pthread_timedjoin_np(check_thr, NULL, &tv);
+		if (rc != 0)
+			condlog(0, "some threads haven't terminated");
+	} while (0);
+
+	do {
+		struct timespec tmo;
+
+		clock_gettime(CLOCK_REALTIME, &tmo);
+		tmo.tv_sec += 5;
+		rc = timedlock(&vecs->lock, &tmo);
+		if (rc != 0) 
+			condlog(0, "failed to take lock during exit, proceeding");
+		if (!maps_removed)
+			remove_maps_and_stop_waiters(vecs);
+		free_pathvec(vecs->pathvec, FREE_PATHS);
+		vecs->pathvec = NULL;
+		if (rc == 0)
+			unlock(&vecs->lock);
+	} while (0);
 	pthread_mutex_destroy(&vecs->lock.mutex);
 	FREE(vecs);
 	vecs = NULL;

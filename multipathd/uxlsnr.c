@@ -139,6 +139,7 @@ void check_timeout(struct timespec start_time, char *inbuf,
 
 void uxsock_cleanup(void *arg)
 {
+	condlog(2, "ux listener exiting");
 	cli_exit();
 	free_polls();
 }
