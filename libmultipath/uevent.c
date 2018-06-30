@@ -358,7 +358,7 @@ static void uevent_cleanup(void *arg)
 {
 	struct udev *udev = arg;
 
-	condlog(3, "Releasing uevent_listen() resources");
+	condlog(2, "Releasing uevent_listen() resources");
 	udev_unref(udev);
 }
 
