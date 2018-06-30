@@ -370,6 +370,17 @@ static void monitor_cleanup(void *arg)
 	udev_monitor_unref(monitor);
 }
 
+static void uev_unlock(void *p)
+{
+	pthread_mutex_unlock(p);
+}
+
+static void uev_cleanup_thread(void *p)
+{
+	condlog(2, "Terminating uev service queue");
+	uevq_cleanup(p);
+}
+
 /*
  * Service the uevent queue.
  */
@@ -381,9 +392,11 @@ int uevent_dispatch(int (*uev_trigger)(struct uevent *, void * trigger_data),
 
 	mlockall(MCL_CURRENT | MCL_FUTURE);
 
+	pthread_cleanup_push(uev_cleanup_thread, &uevq);
 	while (1) {
 		LIST_HEAD(uevq_tmp);
 
+		pthread_cleanup_push(uev_unlock, uevq_lockp);
 		pthread_mutex_lock(uevq_lockp);
 		servicing_uev = 0;
 		/*
@@ -395,14 +408,13 @@ int uevent_dispatch(int (*uev_trigger)(struct uevent *, void * trigger_data),
 		}
 		servicing_uev = 1;
 		list_splice_init(&uevq, &uevq_tmp);
-		pthread_mutex_unlock(uevq_lockp);
+		pthread_cleanup_pop(1);
 		if (!my_uev_trigger)
 			break;
 		merge_uevq(&uevq_tmp);
 		service_uevq(&uevq_tmp);
 	}
-	condlog(3, "Terminating uev service queue");
-	uevq_cleanup(&uevq);
+	pthread_cleanup_pop(1);
 	return 0;
 }
 
