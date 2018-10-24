@@ -188,6 +188,16 @@ static void config_cleanup(void *arg)
 	pthread_mutex_unlock(&config_lock);
 }
 
+static enum daemon_status get_config_state(void)
+{
+	enum daemon_status r;
+
+	pthread_mutex_lock(&config_lock);
+	r = running_state;
+	pthread_mutex_unlock(&config_lock);
+	return r;
+}
+
 void post_config_state(enum daemon_status state)
 {
 	pthread_mutex_lock(&config_lock);
@@ -2089,6 +2099,10 @@ configure (struct vectors * vecs, int start_waiters)
 		condlog(0, "configure failed at path discovery");
 		goto fail;
 	}
+	if (get_config_state() == DAEMON_SHUTDOWN) {
+		condlog(2, "%s: shutdown", __func__);
+		goto fail;
+	}
 
 	vector_foreach_slot (vecs->pathvec, pp, i){
 		conf = get_multipath_config();
@@ -2105,6 +2119,10 @@ configure (struct vectors * vecs, int start_waiters)
 		condlog(0, "configure failed at map discovery");
 		goto fail;
 	}
+	if (get_config_state() == DAEMON_SHUTDOWN) {
+		condlog(2, "%s: shutdown", __func__);
+		goto fail;
+	}
 
 	/*
 	 * create new set of maps & push changed ones into dm
@@ -2119,6 +2137,10 @@ configure (struct vectors * vecs, int start_waiters)
 		condlog(0, "configure failed while coalescing paths");
 		goto fail;
 	}
+	if (get_config_state() == DAEMON_SHUTDOWN) {
+		condlog(2, "%s: shutdown", __func__);
+		goto fail;
+	}
 
 	/*
 	 * may need to remove some maps which are no longer relevant
@@ -2130,6 +2152,10 @@ configure (struct vectors * vecs, int start_waiters)
 	}
 
 	dm_lib_release();
+	if (get_config_state() == DAEMON_SHUTDOWN) {
+		condlog(2, "%s: shutdown", __func__);
+		goto fail;
+	}
 
 	sync_maps_state(mpvec);
 	vector_foreach_slot(mpvec, mpp, i){
@@ -2148,6 +2174,10 @@ configure (struct vectors * vecs, int start_waiters)
 	vector_free(vecs->mpvec);
 	vecs->mpvec = mpvec;
 
+	if (get_config_state() == DAEMON_SHUTDOWN) {
+		condlog(2, "%s: shutdown", __func__);
+		goto fail;
+	}
 	/*
 	 * start dm event waiter threads for these new maps
 	 */
