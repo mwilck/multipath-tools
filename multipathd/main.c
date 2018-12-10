@@ -1578,7 +1578,7 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 	int add_active;
 	int disable_reinstate = 0;
 	int oldchkrstate = pp->chkrstate;
-	int retrigger_tries, checkint;
+	int retrigger_tries, checkint, force_sync;
 	struct config *conf;
 	int ret;
 
@@ -1594,6 +1594,7 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 	conf = get_multipath_config();
 	retrigger_tries = conf->retrigger_tries;
 	checkint = conf->checkint;
+	force_sync = conf->force_sync;
 	put_multipath_config(conf);
 	if (!pp->mpp && pp->initialized == INIT_MISSING_UDEV &&
 	    pp->retriggers < retrigger_tries) {
@@ -1778,6 +1779,17 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 
 		if (oldchkrstate != PATH_UP && oldchkrstate != PATH_GHOST)
 			chkr_new_path_up = 1;
+
+		/*
+		 * setup_map() may have seen pending paths while setting up this
+		 * map, meaning that nr_active has been set to a wrong value.
+		 */
+		if (oldstate == PATH_PENDING && !force_sync) {
+			pp->mpp->nr_active = pathcount(pp->mpp, PATH_UP) +
+				pathcount(pp->mpp, PATH_GHOST);
+			condlog(3, "%s: now %d active paths",
+				pp->mpp->alias, pp->mpp->nr_active);
+		}
 
 		/*
 		 * if at least one path is up in a group, and
