@@ -254,6 +254,44 @@ int rr_optimize_path_order(struct pathgroup *pgp)
 	return 0;
 }
 
+/*
+ * Wait up to 10 ms for pending checkers to finish
+ */
+static int wait_for_pending_paths(struct multipath *mpp,
+				  struct config *conf)
+{
+	static const struct timespec millisec =
+		{ .tv_sec = 0, .tv_nsec = 1000*1000 };
+	int n_pending, retries = 10, j;
+	struct path *pp;
+	struct timespec ts;
+
+	if (conf->force_sync)
+		return 0;
+
+	n_pending = pathcount(mpp, PATH_PENDING);
+
+	if (n_pending == 0)
+		return 0;
+
+	do {
+		vector_foreach_slot(mpp->paths, pp, j) {
+			if (pp->state != PATH_PENDING)
+				continue;
+			pp->state = get_state(pp, conf, 0, PATH_PENDING);
+			if (pp->state != PATH_PENDING)
+				n_pending--;
+		}
+		if (n_pending <= 0)
+			return 0;
+		ts = millisec;
+		while (nanosleep(&ts, &ts) != 0 && errno == EINTR)
+			/* nothing */;
+	} while (--retries > 0);
+
+	return n_pending;
+}
+
 int setup_map(struct multipath *mpp, char *params, int params_size)
 {
 	struct pathgroup * pgp;
@@ -317,6 +355,11 @@ int setup_map(struct multipath *mpp, char *params, int params_size)
 	if (mpp->pgpolicyfn && mpp->pgpolicyfn(mpp))
 		return 1;
 
+	/*
+	 * If async state detection is used, see if pending state checks
+	 * have finished, to get nr_active right.
+	 */
+	wait_for_pending_paths(mpp, conf);
 	mpp->nr_active = pathcount(mpp, PATH_UP) + pathcount(mpp, PATH_GHOST);
 
 	/*
@@ -341,6 +384,8 @@ int setup_map(struct multipath *mpp, char *params, int params_size)
 		}
 	}
 
+	condlog(3, "%s: setting up map with %d active paths", mpp->alias,
+		mpp->nr_active);
 	/*
 	 * transform the mp->pg vector of vectors of paths
 	 * into a mp->params strings to feed the device-mapper
