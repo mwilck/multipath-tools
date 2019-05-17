@@ -22,6 +22,7 @@ static struct option long_options[] = {
 	{"reserve", 0, NULL, 'R'},
 	{"transport-id", 1, NULL, 'X'},
 	{"alloc-length", 1, NULL, 'l'},
+	{"batch-file", 1, NULL, 'f' },
 	{NULL, 0, NULL, 0}
 };
 
