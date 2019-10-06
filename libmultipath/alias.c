@@ -137,6 +137,11 @@ lookup_binding(FILE *f, const char *map_wwid, char **map_alias,
 		if (!alias) /* blank line */
 			continue;
 		curr_id = scan_devname(alias, prefix);
+		if (curr_id == -1) {
+			condlog(1, "Invalid alias at line %u in bindings file",
+				line_nr);
+			continue;
+		}
 		if (curr_id == id) {
 			if (id < INT_MAX)
 				id++;
