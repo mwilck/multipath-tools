@@ -448,6 +448,23 @@ static void lb_nomatch_int_max_m1(void **state)
 	assert_int_equal(rc, INT_MAX);
 	assert_ptr_equal(alias, NULL);
 }
+
+static void lb_nomatch_int_max_p1(void **state)
+{
+	int rc;
+	char *alias;
+
+	will_return(__wrap_fgets, "MPATHb WWID1\n");
+	will_return(__wrap_fgets, "MPATH" MPATH_ID_INT_MAX_p1 " WWIDMAX\n");
+	will_return(__wrap_fgets, "MPATHa WWID0\n");
+	will_return(__wrap_fgets, NULL);
+	expect_condlog(1, "Invalid alias at line 2 in bindings file\n");
+	expect_condlog(3, "No matching wwid [WWID2] in bindings file.\n");
+	rc = lookup_binding(NULL, "WWID2", &alias, "MPATH");
+	assert_int_equal(rc, 3);
+	assert_ptr_equal(alias, NULL);
+}
+
 #endif
 
 static int test_lookup_binding(void)
@@ -465,6 +482,7 @@ static int test_lookup_binding(void)
 #ifdef MPATH_ID_INT_MAX
 		cmocka_unit_test(lb_nomatch_int_max),
 		cmocka_unit_test(lb_nomatch_int_max_m1),
+		cmocka_unit_test(lb_nomatch_int_max_p1),
 #endif
 	};
 
