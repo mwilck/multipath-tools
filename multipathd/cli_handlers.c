@@ -1283,17 +1283,20 @@ cli_fail(void * v, char ** reply, int * len, void * data)
 int
 show_blacklist (char ** r, int * len)
 {
-	char *c = NULL;
-	char *reply = NULL;
-	unsigned int maxlen = INITIAL_REPLY_LEN;
-	int again = 1;
+	char *c, *reply;
+	unsigned int maxlen;
+	int again, fail;
 	struct config *conf;
-	int fail = 0;
-
-	reply = MALLOC(maxlen);
 
 	conf = get_multipath_config();
 	pthread_cleanup_push(put_multipath_config, conf);
+
+	c = reply = NULL;
+	maxlen = INITIAL_REPLY_LEN;
+	fail = 0;
+	again = 1;
+	reply = MALLOC(maxlen);
+
 	while (again) {
 		if (!reply) {
 			fail = 1;
@@ -1325,17 +1328,20 @@ cli_list_blacklist (void * v, char ** reply, int * len, void * data)
 int
 show_devices (char ** r, int * len, struct vectors *vecs)
 {
-	char *c = NULL;
-	char *reply = NULL;
-	unsigned int maxlen = INITIAL_REPLY_LEN;
-	int again = 1;
+	char *c, *reply;
+	unsigned int maxlen;
+	int again, fail;
 	struct config *conf;
-	int fail = 0;
-
-	reply = MALLOC(maxlen);
 
 	conf = get_multipath_config();
 	pthread_cleanup_push(put_multipath_config, conf);
+
+	c = reply = NULL;
+	maxlen = INITIAL_REPLY_LEN;
+	reply = MALLOC(maxlen);
+	fail = 0;
+	again = 1;
+
 	while (again) {
 		if (!reply) {
 			fail = 1;
