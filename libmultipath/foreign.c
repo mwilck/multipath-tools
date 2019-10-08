@@ -495,53 +495,55 @@ void foreign_multipath_layout(void)
 	if (foreigns != NULL) {
 		vector_foreach_slot(foreigns, fgn, i) {
 			_foreign_multipath_layout(fgn);
-
-
-
 		}
 	}
-
 	pthread_cleanup_pop(1);
+}
+
+static int _snprint_foreign_topology(struct foreign *fgn,
+				     char *buf, int len, int verbosity)
+{
+	const struct _vector *vec;
+	const struct gen_multipath *gm;
+	char *c;
+	int j;
+
+	fgn->lock(fgn->context);
+	pthread_cleanup_push(fgn->unlock, fgn->context);
+
+	c = buf;
+	vec = fgn->get_multipaths(fgn->context);
+	if (vec != NULL) {
+		vector_foreach_slot(vec, gm, j) {
+			c += _snprint_multipath_topology(gm, c, buf + len - c,
+							 verbosity);
+			if (c >= buf + len - 1)
+				break;
+		}
+		if (c >= buf + len - 1)
+			break;
+	}
+	fgn->release_multipaths(fgn->context, vec);
+	pthread_cleanup_pop(1);
+	return c - buf;
 }
 
 int snprint_foreign_topology(char *buf, int len, int verbosity)
 {
 	struct foreign *fgn;
 	int i;
-	char *c = buf;
+	char *c;
 
 	rdlock_foreigns();
-	if (foreigns == NULL) {
-		unlock_foreigns(NULL);
-		return 0;
-	}
 	pthread_cleanup_push(unlock_foreigns, NULL);
 
-	vector_foreach_slot(foreigns, fgn, i) {
-		const struct _vector *vec;
-		const struct gen_multipath *gm;
-		int j;
-
-		fgn->lock(fgn->context);
-		pthread_cleanup_push(fgn->unlock, fgn->context);
-
-		vec = fgn->get_multipaths(fgn->context);
-		if (vec != NULL) {
-			vector_foreach_slot(vec, gm, j) {
-
-				c += _snprint_multipath_topology(gm, c,
-								 buf + len - c,
-								 verbosity);
-				if (c >= buf + len - 1)
-					break;
-			}
-			if (c >= buf + len - 1)
-				break;
+	c = buf;
+	if (foreigns != NULL) {
+		vector_foreach_slot(foreigns, fgn, i) {
+			c += _snprint_foreign_topology(fgn, c, buf + len - c,
+						       verbosity);
 		}
-		fgn->release_multipaths(fgn->context, vec);
-		pthread_cleanup_pop(1);
 	}
-
 	pthread_cleanup_pop(1);
 	return c - buf;
 }
