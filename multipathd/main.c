@@ -1721,6 +1721,10 @@ mpvec_garbage_collector (struct vectors * vecs)
 	if (!vecs->mpvec)
 		return;
 
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
+	lock(&vecs->lock);
+	pthread_testcancel();
+	condlog(4, "map garbage collection");
 	vector_foreach_slot (vecs->mpvec, mpp, i) {
 		if (mpp && mpp->alias && !dm_map_present(mpp->alias)) {
 			condlog(2, "%s: remove dead map", mpp->alias);
@@ -1728,6 +1732,7 @@ mpvec_garbage_collector (struct vectors * vecs)
 			i--;
 		}
 	}
+	lock_cleanup_pop(vecs->lock);
 }
 
 /* This is called after a path has started working again. It the multipath
@@ -2013,17 +2018,13 @@ should_skip_path(struct path *pp){
 int
 check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
 {
-	int newstate;
-	int new_path_up = 0;
-	int chkr_new_path_up = 0;
-	int add_active;
-	int disable_reinstate = 0;
-	int oldchkrstate = pp->chkrstate;
+	int newstate, oldchkrstate, ret;
+	int new_path_up, chkr_new_path_up;
+	int add_active, disable_reinstate;
 	int retrigger_tries, verbosity;
 	unsigned int checkint, max_checkint;
 	struct config *conf;
-	int marginal_pathgroups, marginal_changed = 0;
-	int ret;
+	int marginal_pathgroups, marginal_changed;
 
 	if ((pp->initialized == INIT_OK ||
 	     pp->initialized == INIT_REQUESTED_UDEV) && !pp->mpp)
@@ -2041,6 +2042,9 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
 	verbosity = conf->verbosity;
 	marginal_pathgroups = conf->marginal_pathgroups;
 	put_multipath_config(conf);
+
+	new_path_up = chkr_new_path_up = marginal_changed = 0;
+	oldchkrstate = pp->chkrstate;
 
 	if (pp->checkint == CHECKINT_UNDEF) {
 		condlog(0, "%s: BUG: checkint is not set", pp->dev);
@@ -2337,19 +2341,46 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
 	return 1;
 }
 
+int do_check_paths(struct vectors *vecs, unsigned int ticks)
+{
+	struct path *pp;
+	int num_paths, i, rc;
+
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
+	lock(&vecs->lock);
+	pthread_testcancel();
+	num_paths = 0;
+	vector_foreach_slot (vecs->pathvec, pp, i) {
+		rc = check_path(vecs, pp, ticks);
+		if (rc < 0) {
+			vector_del_slot(vecs->pathvec, i);
+			free_path(pp);
+			i--;
+		} else
+			num_paths += rc;
+	}
+	defered_failback_tick(vecs->mpvec);
+	retry_count_tick(vecs->mpvec);
+	missing_uev_wait_tick(vecs);
+	ghost_delay_tick(vecs);
+	lock_cleanup_pop(vecs->lock);
+	return num_paths;
+}
+
 static void *
 checkerloop (void *ap)
 {
 	struct vectors *vecs;
-	struct path *pp;
-	int count = 0;
-	unsigned int i;
+	int count;
 	struct timespec last_time;
 	struct config *conf;
-	int foreign_tick = 0;
+	int foreign_tick;
 
 	pthread_cleanup_push(rcu_unregister, NULL);
 	rcu_register_thread();
+
+	count = 0;
+	foreign_tick = 0;
 	mlockall(MCL_CURRENT | MCL_FUTURE);
 	vecs = (struct vectors *)ap;
 	condlog(2, "path checkers start up");
@@ -2360,7 +2391,7 @@ checkerloop (void *ap)
 
 	while (1) {
 		struct timespec diff_time, start_time, end_time;
-		int num_paths = 0, strict_timing, rc = 0;
+		int num_paths, strict_timing, rc = 0;
 		unsigned int ticks = 0;
 
 		get_monotonic_time(&start_time);
@@ -2386,39 +2417,13 @@ checkerloop (void *ap)
 			/* daemon shutdown */
 			break;
 
-		pthread_cleanup_push(cleanup_lock, &vecs->lock);
-		lock(&vecs->lock);
-		pthread_testcancel();
-		vector_foreach_slot (vecs->pathvec, pp, i) {
-			rc = check_path(vecs, pp, ticks);
-			if (rc < 0) {
-				vector_del_slot(vecs->pathvec, i);
-				free_path(pp);
-				i--;
-			} else
-				num_paths += rc;
-		}
-		lock_cleanup_pop(vecs->lock);
-
-		pthread_cleanup_push(cleanup_lock, &vecs->lock);
-		lock(&vecs->lock);
-		pthread_testcancel();
-		defered_failback_tick(vecs->mpvec);
-		retry_count_tick(vecs->mpvec);
-		missing_uev_wait_tick(vecs);
-		ghost_delay_tick(vecs);
-		lock_cleanup_pop(vecs->lock);
+		num_paths = do_check_paths(vecs, ticks);
 
 		if (count)
 			count--;
 		else {
-			pthread_cleanup_push(cleanup_lock, &vecs->lock);
-			lock(&vecs->lock);
-			pthread_testcancel();
-			condlog(4, "map garbage collection");
 			mpvec_garbage_collector(vecs);
 			count = MAPGCINT;
-			lock_cleanup_pop(vecs->lock);
 		}
 
 		diff_time.tv_nsec = 0;
