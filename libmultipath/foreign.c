@@ -280,7 +280,7 @@ int add_foreign(struct udev_device *udev)
 	struct foreign *fgn;
 	dev_t dt;
 	int j;
-	int r = FOREIGN_IGNORED;
+	int r;
 
 	if (udev == NULL) {
 		condlog(1, "%s called with NULL udev", __func__);
@@ -294,6 +294,7 @@ int add_foreign(struct udev_device *udev)
 	}
 	pthread_cleanup_push(unlock_foreigns, NULL);
 
+	r = FOREIGN_IGNORED;
 	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
 		r = fgn->add(fgn->context, udev);
@@ -321,7 +322,7 @@ int change_foreign(struct udev_device *udev)
 	struct foreign *fgn;
 	int j;
 	dev_t dt;
-	int r = FOREIGN_IGNORED;
+	int r;
 
 	if (udev == NULL) {
 		condlog(1, "%s called with NULL udev", __func__);
@@ -335,6 +336,7 @@ int change_foreign(struct udev_device *udev)
 	}
 	pthread_cleanup_push(unlock_foreigns, NULL);
 
+	r = FOREIGN_IGNORED;
 	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
 		r = fgn->change(fgn->context, udev);
@@ -358,7 +360,7 @@ int delete_foreign(struct udev_device *udev)
 	struct foreign *fgn;
 	int j;
 	dev_t dt;
-	int r = FOREIGN_IGNORED;
+	int r;
 
 	if (udev == NULL) {
 		condlog(1, "%s called with NULL udev", __func__);
@@ -372,6 +374,7 @@ int delete_foreign(struct udev_device *udev)
 	}
 	pthread_cleanup_push(unlock_foreigns, NULL);
 
+	r = FOREIGN_IGNORED;
 	dt = udev_device_get_devnum(udev);
 	vector_foreach_slot(foreigns, fgn, j) {
 		r = fgn->delete(fgn->context, udev);
