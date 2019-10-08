@@ -466,10 +466,21 @@ void foreign_path_layout(void)
 			_foreign_path_layout(fgn);
 		}
 	}
+	pthread_cleanup_pop(1);
+}
 
+static void _foreign_multipath_layout(struct foreign *fgn)
+{
+	const struct _vector *vec;
 
+	fgn->lock(fgn->context);
+	pthread_cleanup_push(fgn->unlock, fgn->context);
 
+	vec = fgn->get_multipaths(fgn->context);
+	if (vec != NULL)
+		_get_multipath_layout(vec, LAYOUT_RESET_NOT);
 
+	fgn->release_multipaths(fgn->context, vec);
 	pthread_cleanup_pop(1);
 }
 
@@ -480,25 +491,14 @@ void foreign_multipath_layout(void)
 	int i;
 
 	rdlock_foreigns();
-	if (foreigns == NULL) {
-		unlock_foreigns(NULL);
-		return;
-	}
 	pthread_cleanup_push(unlock_foreigns, NULL);
+	if (foreigns != NULL) {
+		vector_foreach_slot(foreigns, fgn, i) {
+			_foreign_multipath_layout(fgn);
 
-	vector_foreach_slot(foreigns, fgn, i) {
-		const struct _vector *vec;
 
-		fgn->lock(fgn->context);
-		pthread_cleanup_push(fgn->unlock, fgn->context);
 
-		vec = fgn->get_multipaths(fgn->context);
-		if (vec != NULL) {
-			_get_multipath_layout(vec, LAYOUT_RESET_NOT);
 		}
-		fgn->release_multipaths(fgn->context, vec);
-
-		pthread_cleanup_pop(1);
 	}
 
 	pthread_cleanup_pop(1);
