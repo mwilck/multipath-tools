@@ -188,7 +188,7 @@ uevent_need_merge(void)
 bool
 uevent_can_discard(struct uevent *uev)
 {
-	int invalid = 0;
+	bool blacklisted;
 	struct config * conf;
 
 	/*
@@ -201,14 +201,11 @@ uevent_can_discard(struct uevent *uev)
 	 */
 	conf = get_multipath_config();
 	pthread_cleanup_push(put_multipath_config, conf);
-	if (filter_devnode(conf->blist_devnode, conf->elist_devnode,
-			   uev->kernel) > 0)
-		invalid = 1;
+	blacklisted = filter_devnode(conf->blist_devnode, conf->elist_devnode,
+				     uev->kernel) > 0;
 	pthread_cleanup_pop(1);
 
-	if (invalid)
-		return true;
-	return false;
+	return blacklisted;
 }
 
 bool
