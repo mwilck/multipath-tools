@@ -1229,13 +1229,37 @@ fail:
 	return 1;
 }
 
+static int pathinfo_with_conf(struct path *pp, int flags)
+{
+	struct config *conf;
+	int r;
+
+	conf = get_multipath_config();
+	pthread_cleanup_push(put_multipath_config, conf);
+	r = pathinfo(pp, conf, flags);
+	pthread_cleanup_pop(1);
+	return r;
+}
+
+static int alloc_path_with_pi_and_conf(struct udev_device *udev,
+				       const char *wwid, int flag)
+{
+	int r;
+	struct config *conf;
+
+	conf = get_multipath_config();
+	pthread_cleanup_push(put_multipath_config, conf);
+	r = alloc_path_with_pathinfo(conf, udev, wwid, flag, NULL);
+	pthread_cleanup_pop(1);
+	return r;
+}
+
 static int
 uev_update_path (struct uevent *uev, struct vectors * vecs)
 {
-	int ro, retval = 0, rc;
+	int ro, retval, rc;
 	struct path * pp;
-	struct config *conf;
-	int needs_reinit = 0;
+	int needs_reinit;
 
 	switch ((rc = change_foreign(uev->udev))) {
 	case FOREIGN_OK:
@@ -1252,8 +1276,10 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
 		break;
 	}
 
-	pthread_cleanup_push(cleanup_lock, &vecs->lock);
 	lock(&vecs->lock);
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
+	needs_reinit = 0;
+	retval = 0;
 	pthread_testcancel();
 
 	pp = find_path_by_dev(vecs->pathvec, uev->kernel);
@@ -1284,12 +1310,10 @@ uev_update_path (struct uevent *uev, struct vectors * vecs)
 		} else {
 			udev_device_unref(pp->udev);
 			pp->udev = udev_device_ref(uev->udev);
-			conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
-			if (pathinfo(pp, conf, DI_SYSFS|DI_NOIO) != PATHINFO_OK)
+			if (pathinfo_with_conf(pp, DI_SYSFS|DI_NOIO)
+			    != PATHINFO_OK)
 				condlog(1, "%s: pathinfo failed after change uevent",
 					uev->kernel);
-			pthread_cleanup_pop(1);
 		}
 
 		ro = uevent_get_disk_ro(uev);
@@ -1316,13 +1340,8 @@ out:
 	if (!pp) {
 		/* If the path is blacklisted, print a debug/non-default verbosity message. */
 		if (uev->udev) {
-			int flag = DI_SYSFS | DI_WWID;
-
-			conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
-			retval = alloc_path_with_pathinfo(conf, uev->udev, uev->wwid, flag, NULL);
-			pthread_cleanup_pop(1);
-
+			retval = alloc_path_with_pi_and_conf(uev->udev, uev->wwid,
+							     DI_SYSFS | DI_WWID);
 			if (retval == PATHINFO_SKIPPED) {
 				condlog(3, "%s: spurious uevent, path is blacklisted", uev->kernel);
 				return 0;
