@@ -1348,7 +1348,7 @@ int get_refwwid(enum mpath_cmds cmd, char *dev, enum devtypes dev_type,
 	char * refwwid = NULL, tmpwwid[WWID_SIZE];
 	int flags = DI_SYSFS | DI_WWID;
 	struct config *conf;
-	int invalid = 0;
+	bool invalid;
 
 	if (!wwid)
 		return 1;
@@ -1390,9 +1390,9 @@ int get_refwwid(enum mpath_cmds cmd, char *dev, enum devtypes dev_type,
 		}
 		conf = get_multipath_config();
 		pthread_cleanup_push(put_multipath_config, conf);
-		if (pp->udev && pp->uid_attribute &&
-		    filter_property(conf, pp->udev, 3, pp->uid_attribute) > 0)
-			invalid = 1;
+		invalid = pp->udev && pp->uid_attribute &&
+			filter_property(conf, pp->udev, 3,
+					pp->uid_attribute) > 0;
 		pthread_cleanup_pop(1);
 		if (invalid)
 			return 2;
@@ -1430,9 +1430,9 @@ int get_refwwid(enum mpath_cmds cmd, char *dev, enum devtypes dev_type,
 		}
 		conf = get_multipath_config();
 		pthread_cleanup_push(put_multipath_config, conf);
-		if (pp->udev && pp->uid_attribute &&
-		    filter_property(conf, pp->udev, 3, pp->uid_attribute) > 0)
-			invalid = 1;
+		invalid = pp->udev && pp->uid_attribute &&
+			filter_property(conf, pp->udev, 3,
+					pp->uid_attribute) > 0;
 		pthread_cleanup_pop(1);
 		if (invalid)
 			return 2;
@@ -1459,9 +1459,9 @@ int get_refwwid(enum mpath_cmds cmd, char *dev, enum devtypes dev_type,
 		}
 		conf = get_multipath_config();
 		pthread_cleanup_push(put_multipath_config, conf);
-		if (pp->udev && pp->uid_attribute &&
-		    filter_property(conf, pp->udev, 3, pp->uid_attribute) > 0)
-			invalid = 1;
+		invalid = pp->udev && pp->uid_attribute &&
+			filter_property(conf, pp->udev, 3,
+					pp->uid_attribute) > 0;
 		pthread_cleanup_pop(1);
 		if (invalid)
 			return 2;
@@ -1500,10 +1500,9 @@ int get_refwwid(enum mpath_cmds cmd, char *dev, enum devtypes dev_type,
 			refwwid = dev;
 
 check:
-		if (refwwid && strlen(refwwid) &&
-		    filter_wwid(conf->blist_wwid, conf->elist_wwid, refwwid,
-				NULL) > 0)
-			invalid = 1;
+		invalid = refwwid && strlen(refwwid) &&
+			filter_wwid(conf->blist_wwid, conf->elist_wwid, refwwid,
+				    NULL) > 0;
 		pthread_cleanup_pop(1);
 		if (invalid)
 			return 2;
