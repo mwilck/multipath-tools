@@ -169,7 +169,7 @@ path_discovery (vector pathvec, int flag)
 	struct udev_list_entry *entry;
 	struct udev_device *udevice = NULL;
 	struct config *conf;
-	int num_paths = 0, total_paths = 0, ret;
+	int num_paths, total_paths, ret;
 
 	pthread_cleanup_push(cleanup_udev_enumerate_ptr, &udev_iter);
 	pthread_cleanup_push(cleanup_udev_device_ptr, &udevice);
@@ -190,6 +190,7 @@ path_discovery (vector pathvec, int flag)
 		goto out;
 	}
 
+	num_paths = total_paths = 0;
 	udev_list_entry_foreach(entry,
 				udev_enumerate_get_list_entry(udev_iter)) {
 		const char *devtype;
