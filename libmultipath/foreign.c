@@ -169,7 +169,7 @@ static int _init_foreign(const char *multipath_dir, const char *enable)
 	sr.di = di;
 	sr.n = r;
 	pthread_cleanup_push_cast(free_scandir_result, &sr);
-	for (i = 0; i < r; i++) {
+	for (i = 0; i < sr.n; i++) {
 		const char *msg, *fn, *c;
 		struct foreign *fgn;
 		int len, namesz;
