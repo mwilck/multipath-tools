@@ -836,12 +836,48 @@ static int uevent_listen_loop(int fd, struct udev_monitor *monitor)
 	return 0;
 }
 
+static int setup_udev_monitor(struct udev_monitor *monitor)
+{
+
+	int fd, socket_flags, err;
+
+#ifdef LIBUDEV_API_RECVBUF
+	if (udev_monitor_set_receive_buffer_size(monitor, 128 * 1024 * 1024))
+		condlog(2, "failed to increase buffer size");
+#endif
+	fd = udev_monitor_get_fd(monitor);
+	if (fd < 0) {
+		condlog(2, "failed to get monitor fd");
+		return -1;
+	}
+	socket_flags = fcntl(fd, F_GETFL);
+	if (socket_flags < 0) {
+		condlog(2, "failed to get monitor socket flags : %s",
+			strerror(errno));
+		return -1;
+	}
+	if (fcntl(fd, F_SETFL, socket_flags & ~O_NONBLOCK) < 0) {
+		condlog(2, "failed to set monitor socket flags : %s",
+			strerror(errno));
+		return -1;
+	}
+	err = udev_monitor_filter_add_match_subsystem_devtype(monitor, "block",
+							      "disk");
+	if (err)
+		condlog(2, "failed to create filter : %s", strerror(-err));
+	err = udev_monitor_enable_receiving(monitor);
+	if (err) {
+		condlog(2, "failed to enable receiving : %s", strerror(-err));
+		return -1;
+	}
+	return fd;
+}
+
 int uevent_listen(struct udev *udev)
 {
-	int err = 2;
-	struct udev_monitor *monitor = NULL;
-	int fd, socket_flags;
-	int need_failback = 1;
+	int err;
+	struct udev_monitor *monitor;
+	int fd;
 
 	/*
 	 * Queue uevents for service by dedicated thread so that the uevent
@@ -859,45 +895,18 @@ int uevent_listen(struct udev *udev)
 	monitor = udev_monitor_new_from_netlink(udev, "udev");
 	if (!monitor) {
 		condlog(2, "failed to create udev monitor");
+		fd = -1;
 		goto failback;
 	}
 	pthread_cleanup_push(monitor_cleanup, monitor);
-#ifdef LIBUDEV_API_RECVBUF
-	if (udev_monitor_set_receive_buffer_size(monitor, 128 * 1024 * 1024))
-		condlog(2, "failed to increase buffer size");
-#endif
-	fd = udev_monitor_get_fd(monitor);
-	if (fd < 0) {
-		condlog(2, "failed to get monitor fd");
-		goto out;
-	}
-	socket_flags = fcntl(fd, F_GETFL);
-	if (socket_flags < 0) {
-		condlog(2, "failed to get monitor socket flags : %s",
-			strerror(errno));
-		goto out;
-	}
-	if (fcntl(fd, F_SETFL, socket_flags & ~O_NONBLOCK) < 0) {
-		condlog(2, "failed to set monitor socket flags : %s",
-			strerror(errno));
-		goto out;
-	}
-	err = udev_monitor_filter_add_match_subsystem_devtype(monitor, "block",
-							      "disk");
-	if (err)
-		condlog(2, "failed to create filter : %s", strerror(-err));
-	err = udev_monitor_enable_receiving(monitor);
-	if (err) {
-		condlog(2, "failed to enable receiving : %s", strerror(-err));
-		goto out;
-	}
 
-	err = uevent_listen_loop(fd, monitor);
-	need_failback = 0;
-out:
+	fd = setup_udev_monitor(monitor);
+	if (fd >= 0)
+		err = uevent_listen_loop(fd, monitor);
+
 	pthread_cleanup_pop(1);
 failback:
-	if (need_failback)
+	if (fd < 0)
 		err = failback_listen();
 	pthread_cleanup_pop(1);
 	return err;
