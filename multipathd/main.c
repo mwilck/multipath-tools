@@ -1458,15 +1458,15 @@ uxsock_trigger (char * str, char ** reply, int * len, bool is_root,
 int
 uev_trigger (struct uevent * uev, void * trigger_data)
 {
-	int r = 0;
+	int r;
 	struct vectors * vecs;
 	struct uevent *merge_uev, *tmp;
 	enum daemon_status state;
 
 	vecs = (struct vectors *)trigger_data;
 
-	pthread_cleanup_push(config_cleanup, NULL);
 	pthread_mutex_lock(&config_lock);
+	pthread_cleanup_push(config_cleanup, NULL);
 	while (running_state != DAEMON_IDLE &&
 	       running_state != DAEMON_RUNNING &&
 	       running_state != DAEMON_SHUTDOWN)
@@ -1482,6 +1482,7 @@ uev_trigger (struct uevent * uev, void * trigger_data)
 	 * Add events are ignored here as the tables
 	 * are not fully initialised then.
 	 */
+	r = 0;
 	if (!strncmp(uev->kernel, "dm-", 3)) {
 		if (!uevent_is_mpath(uev)) {
 			if (!strncmp(uev->action, "change", 6))
