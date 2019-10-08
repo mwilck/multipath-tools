@@ -327,15 +327,14 @@ need_switch_pathgroup (struct multipath * mpp, int refresh)
 	 * Refresh path priority values
 	 */
 	if (refresh) {
+		conf = get_multipath_config();
+		pthread_cleanup_push(put_multipath_config, conf);
 		vector_foreach_slot (mpp->pg, pgp, i) {
 			vector_foreach_slot (pgp->paths, pp, j) {
-				conf = get_multipath_config();
-				pthread_cleanup_push(put_multipath_config,
-						     conf);
 				pathinfo(pp, conf, DI_PRIO);
-				pthread_cleanup_pop(1);
 			}
 		}
+		pthread_cleanup_pop(1);
 	}
 
 	if (!mpp->pg || VECTOR_SIZE(mpp->paths) == 0)
