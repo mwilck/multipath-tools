@@ -398,6 +398,29 @@ enum {
 
 static const char shm_find_mp_dir[] = MULTIPATH_SHM_BASE "find_multipaths";
 
+static int _fstat_and_close(long fd, struct stat *st)
+{
+	int r;
+
+	pthread_cleanup_push(close_fd, (void *)fd);
+	r = fstat(fd, st);
+	pthread_cleanup_pop(1);
+	return r;
+}
+
+static int _futimens_fstat_and_close(long fd, struct stat *st,
+				     const struct timespec *ftimes)
+{
+	int r;
+
+	pthread_cleanup_push(close_fd, (void *)fd);
+	if (futimens(fd, ftimes) != 0)
+		condlog(1, "%s: error in futimens: %m", __func__);
+	r = fstat(fd, st);
+	pthread_cleanup_pop(1);
+	return r;
+}
+
 /**
  * find_multipaths_check_timeout(wwid, tmo)
  * Helper for "find_multipaths smart"
@@ -436,12 +459,9 @@ static int find_multipaths_check_timeout(const struct path *pp, long tmo,
 
 retry:
 	fd = open(path, O_RDONLY);
-	if (fd != -1) {
-		pthread_cleanup_push(close_fd, (void *)fd);
-		r = fstat(fd, &st);
-		pthread_cleanup_pop(1);
-
-	} else if (tmo > 0) {
+	if (fd != -1)
+		r = _fstat_and_close(fd, &st);
+	else if (tmo > 0) {
 		if (errno == ENOENT)
 			fd = open(path, O_RDWR|O_EXCL|O_CREAT, 0644);
 		if (fd == -1) {
@@ -453,7 +473,6 @@ retry:
 			return FIND_MULTIPATHS_ERROR;
 		};
 
-		pthread_cleanup_push(close_fd, (void *)fd);
 		/*
 		 * We just created the file. Set st_mtim to our desired
 		 * expiry time.
@@ -462,12 +481,7 @@ retry:
 		ftimes[0].tv_nsec = UTIME_OMIT;
 		ftimes[1].tv_sec = now.tv_sec + tmo;
 		ftimes[1].tv_nsec = now.tv_nsec;
-		if (futimens(fd, ftimes) != 0) {
-			condlog(1, "%s: error in futimens(%s): %s", __func__,
-				path, strerror(errno));
-		}
-		r = fstat(fd, &st);
-		pthread_cleanup_pop(1);
+		r = _futimens_fstat_and_close(fd, &st, ftimes);
 	} else
 		return FIND_MULTIPATHS_NEVER;
 
