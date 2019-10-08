@@ -1088,8 +1088,7 @@ out:
 int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 		    int force_reload, enum mpath_cmds cmd)
 {
-	int ret = CP_FAIL;
-	int k, i, r;
+	int ret, k, i, r;
 	int is_daemon = (cmd == CMD_NONE) ? 1 : 0;
 	char params[PARAMS_SIZE];
 	struct multipath * mpp;
@@ -1100,16 +1099,7 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 	struct config *conf;
 	int allow_queueing;
 	uint64_t *size_mismatch_seen;
-
-	/* ignore refwwid if it's empty */
-	if (refwwid && !strlen(refwwid))
-		refwwid = NULL;
-
-	if (force_reload != FORCE_RELOAD_NONE) {
-		vector_foreach_slot (pathvec, pp1, k) {
-			pp1->mpp = NULL;
-		}
-	}
+	bool have_refwwid;
 
 	if (VECTOR_SIZE(pathvec) == 0)
 		return CP_OK;
@@ -1117,6 +1107,19 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 				    sizeof(uint64_t));
 	if (size_mismatch_seen == NULL)
 		return CP_FAIL;
+	pthread_cleanup_push(free, size_mismatch_seen);
+
+	conf = get_multipath_config();
+	pthread_cleanup_push(put_multipath_config, conf);
+
+	ret = CP_FAIL;
+	have_refwwid = refwwid && strlen(refwwid);
+
+	if (force_reload != FORCE_RELOAD_NONE) {
+		vector_foreach_slot (pathvec, pp1, k) {
+			pp1->mpp = NULL;
+		}
+	}
 
 	vector_foreach_slot (pathvec, pp1, k) {
 		int invalid;
@@ -1128,10 +1131,7 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 			continue;
 		}
 
-		conf = get_multipath_config();
-		pthread_cleanup_push(put_multipath_config, conf);
 		invalid = (filter_path(conf, pp1) > 0);
-		pthread_cleanup_pop(1);
 		if (invalid) {
 			orphan_path(pp1, "blacklisted");
 			continue;
@@ -1148,11 +1148,11 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 		}
 
 		/* 4. path is out of scope */
-		if (refwwid && strncmp(pp1->wwid, refwwid, WWID_SIZE - 1))
+		if (have_refwwid && strncmp(pp1->wwid, refwwid, WWID_SIZE - 1))
 			continue;
 
 		/* If find_multipaths was selected check if the path is valid */
-		if (!refwwid && !should_multipath(pp1, pathvec, curmp)) {
+		if (!have_refwwid && !should_multipath(pp1, pathvec, curmp)) {
 			orphan_path(pp1, "only one path");
 			continue;
 		}
@@ -1239,9 +1239,7 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 			 */
 			trigger_udev_change(find_mp_by_wwid(curmp, mpp->wwid));
 
-		conf = get_multipath_config();
 		allow_queueing = conf->allow_queueing;
-		put_multipath_config(conf);
 		if (!is_daemon && !allow_queueing && !check_daemon()) {
 			if (mpp->no_path_retry != NO_PATH_RETRY_UNDEF &&
 			    mpp->no_path_retry != NO_PATH_RETRY_FAIL)
@@ -1255,9 +1253,7 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 		if (!is_daemon && mpp->action != ACT_NOTHING) {
 			int verbosity;
 
-			conf = get_multipath_config();
 			verbosity = conf->verbosity;
-			put_multipath_config(conf);
 			print_multipath_topology(mpp, verbosity);
 		}
 
@@ -1297,7 +1293,8 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 	}
 	ret = CP_OK;
 out:
-	free(size_mismatch_seen);
+	pthread_cleanup_pop(1);
+	pthread_cleanup_pop(1);
 	return ret;
 }
 
