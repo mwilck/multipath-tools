@@ -2012,16 +2012,12 @@ should_skip_path(struct path *pp){
 int
 check_path (struct vectors * vecs, struct path * pp, int ticks)
 {
-	int newstate;
-	int new_path_up = 0;
-	int chkr_new_path_up = 0;
-	int add_active;
-	int disable_reinstate = 0;
-	int oldchkrstate = pp->chkrstate;
+	int newstate, oldchkrstate, ret;
+	int new_path_up, chkr_new_path_up;
+	int add_active, disable_reinstate;
 	int retrigger_tries, checkint, max_checkint, verbosity;
+	int marginal_pathgroups, marginal_changed;
 	struct config *conf;
-	int marginal_pathgroups, marginal_changed = 0;
-	int ret;
 
 	if ((pp->initialized == INIT_OK ||
 	     pp->initialized == INIT_REQUESTED_UDEV) && !pp->mpp)
@@ -2039,6 +2035,9 @@ check_path (struct vectors * vecs, struct path * pp, int ticks)
 	verbosity = conf->verbosity;
 	marginal_pathgroups = conf->marginal_pathgroups;
 	put_multipath_config(conf);
+
+	new_path_up = chkr_new_path_up = marginal_changed = 0;
+	oldchkrstate = pp->chkrstate;
 
 	if (pp->checkint == CHECKINT_UNDEF) {
 		condlog(0, "%s: BUG: checkint is not set", pp->dev);
