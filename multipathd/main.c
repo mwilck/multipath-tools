@@ -271,10 +271,11 @@ void post_config_state(enum daemon_status state)
 
 int set_config_state(enum daemon_status state)
 {
-	int rc = 0;
+	int rc;
 
-	pthread_cleanup_push(config_cleanup, NULL);
 	pthread_mutex_lock(&config_lock);
+	pthread_cleanup_push(config_cleanup, NULL);
+	rc = 0;
 	if (running_state != state) {
 		enum daemon_status old_state = running_state;
 
