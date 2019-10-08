@@ -1104,6 +1104,9 @@ uev_remove_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 	pp = find_path_by_dev(vecs->pathvec, uev->kernel);
 	if (pp)
 		ret = ev_remove_path(pp, vecs, need_do_map);
+	else
+		/* Necessary to avoid -Wclobbered warning */
+		ret = 0;
 	lock_cleanup_pop(vecs->lock);
 	if (!pp) {
 		/* Not an error; path might have been purged earlier */
