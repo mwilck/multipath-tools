@@ -577,40 +577,49 @@ void print_foreign_topology(int verbosity)
 	}
 }
 
+static int _snprint_foreign_paths(struct foreign *fgn, char *buf, int len,
+				  const char *style, int pretty)
+{
+	const struct _vector *vec;
+	const struct gen_path *gp;
+	int j;
+	char *c;
+
+	fgn->lock(fgn->context);
+	pthread_cleanup_push(fgn->unlock, fgn->context);
+	c = buf;
+
+	vec = fgn->get_paths(fgn->context);
+	if (vec != NULL) {
+		vector_foreach_slot(vec, gp, j) {
+			c += _snprint_path(gp, c, buf + len - c,
+					   style, pretty);
+			if (c >= buf + len - 1)
+				break;
+		}
+		if (c >= buf + len - 1)
+			break;
+	}
+	fgn->release_paths(fgn->context, vec);
+	pthread_cleanup_pop(1);
+	return c - buf;
+}
+
 int snprint_foreign_paths(char *buf, int len, const char *style, int pretty)
 {
 	struct foreign *fgn;
 	int i;
-	char *c = buf;
+	char *c;
 
 	rdlock_foreigns();
-	if (foreigns == NULL) {
-		unlock_foreigns(NULL);
-		return 0;
-	}
 	pthread_cleanup_push(unlock_foreigns, NULL);
 
-	vector_foreach_slot(foreigns, fgn, i) {
-		const struct _vector *vec;
-		const struct gen_path *gp;
-		int j;
-
-		fgn->lock(fgn->context);
-		pthread_cleanup_push(fgn->unlock, fgn->context);
-
-		vec = fgn->get_paths(fgn->context);
-		if (vec != NULL) {
-			vector_foreach_slot(vec, gp, j) {
-				c += _snprint_path(gp, c, buf + len - c,
-						   style, pretty);
-				if (c >= buf + len - 1)
-					break;
-			}
-			if (c >= buf + len - 1)
-				break;
+	c = buf;
+	if (foreigns != NULL) {
+		vector_foreach_slot(foreigns, fgn, i) {
+			c += _snprint_foreign_paths(fgn, buf, len,
+						    style, pretty);
 		}
-		fgn->release_paths(fgn->context, vec);
-		pthread_cleanup_pop(1);
 	}
 
 	pthread_cleanup_pop(1);
