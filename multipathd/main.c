@@ -860,7 +860,7 @@ static int
 uev_add_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 {
 	struct path *pp;
-	int ret = 0, i;
+	int ret, i;
 	struct config *conf;
 
 	condlog(3, "%s: add path (uevent)", uev->kernel);
@@ -875,6 +875,9 @@ uev_add_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 	pthread_cleanup_push(cleanup_lock, &vecs->lock);
 	lock(&vecs->lock);
 	pthread_testcancel();
+	conf = get_multipath_config();
+	pthread_cleanup_push(put_multipath_config, conf);
+	ret = 0;
 	pp = find_path_by_dev(vecs->pathvec, uev->kernel);
 	if (pp) {
 		int r;
@@ -885,11 +888,8 @@ uev_add_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 			condlog(3, "%s: reinitialize path", uev->kernel);
 			udev_device_unref(pp->udev);
 			pp->udev = udev_device_ref(uev->udev);
-			conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
 			r = pathinfo(pp, conf,
 				     DI_ALL | DI_BLACKLIST);
-			pthread_cleanup_pop(1);
 			if (r == PATHINFO_OK)
 				ret = ev_add_path(pp, vecs, need_do_map);
 			else if (r == PATHINFO_SKIPPED) {
@@ -906,6 +906,7 @@ uev_add_path (struct uevent *uev, struct vectors * vecs, int need_do_map)
 			}
 		}
 	}
+	pthread_cleanup_pop(1);
 	lock_cleanup_pop(vecs->lock);
 	if (pp)
 		return ret;
