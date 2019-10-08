@@ -1919,6 +1919,11 @@ get_uid (struct path * pp, int path_state, struct udev_device *udev,
 		pthread_cleanup_pop(1);
 	}
 
+	/* Must initialize these after pthread_cleanup_push() */
+	len = 0;
+	used_fallback =0;
+	origin = "unknown";
+
 	memset(pp->wwid, 0, WWID_SIZE);
 	if (pp->getuid) {
 		char buff[CALLOUT_MAX_SIZE];
