@@ -777,15 +777,72 @@ bool uevent_burst(struct timeval *start_time, int events)
 	return false;
 }
 
+static int uevent_listen_loop(int fd, struct udev_monitor *monitor)
+{
+	int timeout = 30;
+	int events = 0;
+	struct timeval start_time;
+	LIST_HEAD(uevlisten_tmp);
+
+	gettimeofday(&start_time, NULL);
+	while (1) {
+		struct uevent *uev;
+		struct udev_device *dev;
+		struct pollfd ev_poll;
+		int poll_timeout;
+		int fdcount;
+
+		memset(&ev_poll, 0, sizeof(struct pollfd));
+		ev_poll.fd = fd;
+		ev_poll.events = POLLIN;
+		poll_timeout = timeout * 1000;
+		errno = 0;
+		fdcount = poll(&ev_poll, 1, poll_timeout);
+		if (fdcount > 0 && ev_poll.revents & POLLIN) {
+			timeout = uevent_burst(&start_time, events + 1) ? 1 : 0;
+			dev = udev_monitor_receive_device(monitor);
+			if (!dev) {
+				condlog(0, "failed getting udev device");
+				continue;
+			}
+			uev = uevent_from_udev_device(dev);
+			if (!uev)
+				continue;
+			list_add_tail(&uev->node, &uevlisten_tmp);
+			events++;
+			continue;
+		}
+		if (fdcount < 0) {
+			if (errno == EINTR)
+				continue;
+
+			condlog(0, "error receiving "
+				"uevent message: %m");
+			return -errno;
+		}
+		if (!list_empty(&uevlisten_tmp)) {
+			/*
+			 * Queue uevents and poke service pthread.
+			 */
+			condlog(3, "Forwarding %d uevents", events);
+			pthread_mutex_lock(uevq_lockp);
+			list_splice_tail_init(&uevlisten_tmp, &uevq);
+			pthread_cond_signal(uev_condp);
+			pthread_mutex_unlock(uevq_lockp);
+			events = 0;
+		}
+		gettimeofday(&start_time, NULL);
+		timeout = 30;
+	}
+	return 0;
+}
+
 int uevent_listen(struct udev *udev)
 {
 	int err = 2;
 	struct udev_monitor *monitor = NULL;
-	int fd, socket_flags, events;
-	struct timeval start_time;
+	int fd, socket_flags;
 	int need_failback = 1;
-	int timeout = 30;
-	LIST_HEAD(uevlisten_tmp);
 
 	/*
 	 * Queue uevents for service by dedicated thread so that the uevent
@@ -836,58 +893,7 @@ int uevent_listen(struct udev *udev)
 		goto out;
 	}
 
-	events = 0;
-	gettimeofday(&start_time, NULL);
-	while (1) {
-		struct uevent *uev;
-		struct udev_device *dev;
-		struct pollfd ev_poll;
-		int poll_timeout;
-		int fdcount;
-
-		memset(&ev_poll, 0, sizeof(struct pollfd));
-		ev_poll.fd = fd;
-		ev_poll.events = POLLIN;
-		poll_timeout = timeout * 1000;
-		errno = 0;
-		fdcount = poll(&ev_poll, 1, poll_timeout);
-		if (fdcount > 0 && ev_poll.revents & POLLIN) {
-			timeout = uevent_burst(&start_time, events + 1) ? 1 : 0;
-			dev = udev_monitor_receive_device(monitor);
-			if (!dev) {
-				condlog(0, "failed getting udev device");
-				continue;
-			}
-			uev = uevent_from_udev_device(dev);
-			if (!uev)
-				continue;
-			list_add_tail(&uev->node, &uevlisten_tmp);
-			events++;
-			continue;
-		}
-		if (fdcount < 0) {
-			if (errno == EINTR)
-				continue;
-
-			condlog(0, "error receiving "
-				"uevent message: %m");
-			err = -errno;
-			break;
-		}
-		if (!list_empty(&uevlisten_tmp)) {
-			/*
-			 * Queue uevents and poke service pthread.
-			 */
-			condlog(3, "Forwarding %d uevents", events);
-			pthread_mutex_lock(uevq_lockp);
-			list_splice_tail_init(&uevlisten_tmp, &uevq);
-			pthread_cond_signal(uev_condp);
-			pthread_mutex_unlock(uevq_lockp);
-			events = 0;
-		}
-		gettimeofday(&start_time, NULL);
-		timeout = 30;
-	}
+	err = uevent_listen_loop(fd, monitor);
 	need_failback = 0;
 out:
 	pthread_cleanup_pop(1);
