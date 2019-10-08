@@ -92,13 +92,15 @@ replace_wwids(vector mp)
 	long fd;
 	struct multipath * mpp;
 	size_t len;
-	int ret = -1;
+	int ret;
 	struct config *conf;
 
 	conf = get_multipath_config();
 	pthread_cleanup_push(put_multipath_config, conf);
 	fd = open_file(conf->wwids_file, &can_write, WWIDS_FILE_HEADER);
 	pthread_cleanup_pop(1);
+
+	ret = -1;
 	if (fd < 0)
 		goto out;
 
