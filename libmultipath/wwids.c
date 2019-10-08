@@ -375,10 +375,12 @@ static int multipath_shm_open(bool rw)
 
 static void multipath_shm_close(void *arg)
 {
-	long fd = (long)arg;
+	long *pfd = (long*)arg;
 
-	close(fd);
-	unlink(shm_lock_path);
+	if (pfd && *pfd != -1) {
+		close(*pfd);
+		unlink(shm_lock_path);
+	}
 }
 
 static int _failed_wwid_op(const char *wwid, bool rw,
@@ -398,7 +400,7 @@ static int _failed_wwid_op(const char *wwid, bool rw,
 	if (lockfd == -1)
 		return -1;
 
-	pthread_cleanup_push(multipath_shm_close, (void *)lockfd);
+	pthread_cleanup_push(multipath_shm_close, &lockfd);
 	r = func(path);
 	pthread_cleanup_pop(1);
 
