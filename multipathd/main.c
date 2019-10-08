@@ -1832,27 +1832,28 @@ int update_prio(struct path *pp, int refresh_all)
 	int oldpriority;
 	struct path *pp1;
 	struct pathgroup * pgp;
-	int i, j, changed = 0;
 	struct config *conf;
 
 	if (refresh_all) {
+		int i, j, changed;
+
+		conf = get_multipath_config();
+		pthread_cleanup_push(put_multipath_config, conf);
+		changed = 0;
 		vector_foreach_slot (pp->mpp->pg, pgp, i) {
 			vector_foreach_slot (pgp->paths, pp1, j) {
 				oldpriority = pp1->priority;
-				conf = get_multipath_config();
-				pthread_cleanup_push(put_multipath_config,
-						     conf);
 				pathinfo(pp1, conf, DI_PRIO);
-				pthread_cleanup_pop(1);
 				if (pp1->priority != oldpriority)
 					changed = 1;
 			}
 		}
+		pthread_cleanup_pop(1);
 		return changed;
 	}
-	oldpriority = pp->priority;
 	conf = get_multipath_config();
 	pthread_cleanup_push(put_multipath_config, conf);
+	oldpriority = pp->priority;
 	if (pp->state != PATH_DOWN)
 		pathinfo(pp, conf, DI_PRIO);
 	pthread_cleanup_pop(1);
