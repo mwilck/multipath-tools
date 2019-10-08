@@ -1523,21 +1523,27 @@ int reload_map(struct vectors *vecs, struct multipath *mpp, int refresh,
 	char params[PARAMS_SIZE] = {0};
 	struct path *pp;
 	int i, r;
+	struct config *conf;
 
 	update_mpp_paths(mpp, vecs->pathvec);
+	conf = get_multipath_config();
+	pthread_cleanup_push(put_multipath_config, conf);
+
+	r = 0;
 	if (refresh) {
 		vector_foreach_slot (mpp->paths, pp, i) {
-			struct config *conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
 			r = pathinfo(pp, conf, DI_PRIO);
-			pthread_cleanup_pop(1);
 			if (r) {
 				condlog(2, "%s: failed to refresh pathinfo",
 					mpp->alias);
-				return 1;
+				break;
 			}
 		}
 	}
+	pthread_cleanup_pop(1);
+	if (r)
+		return 1;
+
 	if (setup_map(mpp, params, PARAMS_SIZE, vecs)) {
 		condlog(0, "%s: failed to setup map", mpp->alias);
 		return 1;
