@@ -148,7 +148,10 @@ path_discovery (vector pathvec, int flag)
 	struct udev_device *udevice;
 	struct config *conf;
 	const char *devpath;
-	int num_paths = 0, total_paths = 0;
+	int num_paths, total_paths;
+
+	pthread_cleanup_push(put_multipath_config, conf);
+	conf = get_multipath_config();
 
 	udev_iter = udev_enumerate_new(udev);
 	if (!udev_iter)
@@ -158,6 +161,7 @@ path_discovery (vector pathvec, int flag)
 	udev_enumerate_add_match_is_initialized(udev_iter);
 	udev_enumerate_scan_devices(udev_iter);
 
+	num_paths = total_paths = 0;
 	udev_list_entry_foreach(entry,
 				udev_enumerate_get_list_entry(udev_iter)) {
 		const char *devtype;
@@ -171,17 +175,15 @@ path_discovery (vector pathvec, int flag)
 		devtype = udev_device_get_devtype(udevice);
 		if(devtype && !strncmp(devtype, "disk", 4)) {
 			total_paths++;
-			conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
 			if (path_discover(pathvec, conf,
 					  udevice, flag) == PATHINFO_OK)
 				num_paths++;
-			pthread_cleanup_pop(1);
 		}
 		udev_device_unref(udevice);
 	}
 	udev_enumerate_unref(udev_iter);
 	condlog(4, "Discovered %d/%d paths", num_paths, total_paths);
+	pthread_cleanup_pop(1);
 	return (total_paths - num_paths);
 }
 
