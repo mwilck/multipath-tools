@@ -295,13 +295,37 @@ static int select_dm_devs(const struct dirent *di)
 	return fnmatch("dm-*", di->d_name, FNM_FILE_NAME) == 0;
 }
 
+static bool check_path_uuid(const char *pathbuf)
+{
+	long fd;
+	int nr;
+	char uuid[6];
+	bool hit;
+
+	fd = open(pathbuf, O_RDONLY);
+	if (fd == -1) {
+		condlog(1, "%s: error opening %s: %m", __func__, pathbuf);
+		return false;
+	}
+
+	pthread_cleanup_push(close_fd, (void *)fd);
+	nr = read(fd, uuid, sizeof(uuid));
+	hit = (nr == sizeof(uuid) && !memcmp(uuid, "mpath-", sizeof(uuid)));
+	pthread_cleanup_pop(1);
+
+	if (nr < 0)
+		condlog(1, "%s: error reading from %s: %m", __func__, pathbuf);
+
+	return hit;
+}
+
 bool sysfs_is_multipathed(const struct path *pp)
 {
 	char pathbuf[PATH_MAX];
 	struct scandir_result sr;
 	struct dirent **di;
 	int n, r, i;
-	bool found = false;
+	bool found;
 
 	n = snprintf(pathbuf, sizeof(pathbuf), "/sys/block/%s/holders",
 		     pp->dev);
@@ -322,30 +346,13 @@ bool sysfs_is_multipathed(const struct path *pp)
 	sr.di = di;
 	sr.n = r;
 	pthread_cleanup_push_cast(free_scandir_result, &sr);
-	for (i = 0; i < r && !found; i++) {
-		long fd;
-		int nr;
-		char uuid[6];
-
+	for (i = 0, found = false; i < r && !found; i++) {
 		if (safe_snprintf(pathbuf + n, sizeof(pathbuf) - n,
 				  "/%s/dm/uuid", di[i]->d_name))
 			continue;
 
-		fd = open(pathbuf, O_RDONLY);
-		if (fd == -1) {
-			condlog(1, "%s: error opening %s", __func__, pathbuf);
-			continue;
-		}
-
-		pthread_cleanup_push(close_fd, (void *)fd);
-		nr = read(fd, uuid, sizeof(uuid));
-		if (nr == sizeof(uuid) && !memcmp(uuid, "mpath-", sizeof(uuid)))
+		if (check_path_uuid(pathbuf))
 			found = true;
-		else if (nr < 0) {
-			condlog(1, "%s: error reading from %s: %s",
-				__func__, pathbuf, strerror(errno));
-		}
-		pthread_cleanup_pop(1);
 	}
 	pthread_cleanup_pop(1);
 
