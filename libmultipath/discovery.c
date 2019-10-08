@@ -182,9 +182,12 @@ path_discovery (vector pathvec, int flag)
 		goto out;
 	}
 
-	udev_enumerate_add_match_subsystem(udev_iter, "block");
-	udev_enumerate_add_match_is_initialized(udev_iter);
-	udev_enumerate_scan_devices(udev_iter);
+	if (udev_enumerate_add_match_subsystem(udev_iter, "block") < 0 ||
+	    udev_enumerate_add_match_is_initialized(udev_iter) < 0 ||
+	    udev_enumerate_scan_devices(udev_iter) < 0) {
+		condlog(1, "%s: error setting up udev_enumerate: %m", __func__);
+		goto out;
+	}
 
 	num_paths = total_paths = 0;
 	udev_list_entry_foreach(entry,
