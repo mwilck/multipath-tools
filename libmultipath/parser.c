@@ -148,14 +148,13 @@ find_keyword(vector keywords, vector v, char * name)
 	return NULL;
 }
 
-int
-snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
-		const void *data)
+static int
+_snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
+		 const void *data, struct config *conf)
 {
 	int r;
 	int fwd = 0;
 	char *f = fmt;
-	struct config *conf;
 
 	if (!kw || !kw->print)
 		return 0;
@@ -174,10 +173,7 @@ snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
 			fwd += snprintf(buff + fwd, len - fwd, "%s", kw->string);
 			break;
 		case 'v':
-			conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
 			r = kw->print(conf, buff + fwd, len - fwd, data);
-			pthread_cleanup_pop(1);
 			if (!r) { /* no output if no value */
 				buff[0] = '\0';
 				return 0;
@@ -189,6 +185,20 @@ snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
 			fwd = len;
 	} while (*f++);
 	return fwd;
+}
+
+int
+snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
+		 const void *data)
+{
+	int r;
+	struct config *conf;
+
+	pthread_cleanup_push(put_multipath_config, conf);
+	conf = get_multipath_config();
+	r = _snprint_keyword(buff, len, fmt, kw, data, conf);
+	pthread_cleanup_pop(1);
+	return r;
 }
 
 static const char quote_marker[] = { '\0', '"', '\0' };
