@@ -529,17 +529,18 @@ static int _dirent_controller(const struct dirent *di)
 }
 
 /* Find the block device for a given nvme controller */
-struct udev_device *get_ctrl_blkdev(const struct context *ctx,
-				    struct udev_device *ctrl)
+static struct udev_device *get_ctrl_blkdev(const struct context *ctx,
+					   struct udev_device *ctrl)
 {
 	struct udev_list_entry *item;
-	struct udev_device *blkdev = NULL;
+	struct udev_device *blkdev;
 	struct udev_enumerate *enm = udev_enumerate_new(ctx->udev);
 
 	if (enm == NULL)
 		return NULL;
 
 	pthread_cleanup_push(_udev_enumerate_unref, enm);
+	blkdev = NULL;
 	if (udev_enumerate_add_match_parent(enm, ctrl) < 0)
 		goto out;
 	if (udev_enumerate_add_match_subsystem(enm, "block"))
@@ -575,6 +576,18 @@ struct udev_device *get_ctrl_blkdev(const struct context *ctx,
 out:
 	pthread_cleanup_pop(1);
 	return blkdev;
+}
+
+static struct udev_device *get_ctrl_blkdev_drop_ref(const struct context *ctx,
+						    struct udev_device *ctrl)
+{
+	struct udev_device *udev;
+
+	pthread_cleanup_push(_udev_device_unref, ctrl);
+	udev = get_ctrl_blkdev(ctx, ctrl);
+	pthread_cleanup_pop(1);
+
+	return udev;
 }
 
 static void test_ana_support(struct nvme_map *map, struct udev_device *ctl)
@@ -677,14 +690,12 @@ static void _find_controllers(struct context *ctx, struct nvme_map *map)
 			continue;
 		}
 
-		pthread_cleanup_push(_udev_device_unref, ctrl);
-		udev = get_ctrl_blkdev(ctx, ctrl);
 		/*
 		 * We give up the reference to the nvme device here and get
 		 * it back from the child below.
 		 * This way we don't need to worry about unreffing it.
 		 */
-		pthread_cleanup_pop(1);
+		udev = get_ctrl_blkdev_drop_ref(ctx, ctrl);
 
 		if (udev == NULL)
 			continue;
