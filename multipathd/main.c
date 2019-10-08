@@ -2822,6 +2822,62 @@ set_oom_adj (void)
 	condlog(0, "couldn't adjust oom score");
 }
 
+static int wait_for_uxlsnr(enum daemon_status *state,
+			   pthread_t *thr, pthread_attr_t *attr,
+			   struct vectors *vecs)
+{
+	int rc;
+	enum daemon_status st;
+
+	pthread_cleanup_push(config_cleanup, NULL);
+	pthread_mutex_lock(&config_lock);
+	st = running_state;
+
+	__post_config_state(DAEMON_IDLE);
+	rc = pthread_create(thr, attr, uxlsnrloop, vecs);
+	if (!rc) {
+		/* Wait for uxlsnr startup */
+		while (running_state == DAEMON_IDLE)
+			pthread_cond_wait(&config_cond, &config_lock);
+		st = running_state;
+	}
+	pthread_cleanup_pop(1);
+	*state = st;
+	return rc;
+}
+
+static int wait_for_child_state(void)
+{
+	int state;
+
+	pthread_cleanup_push(config_cleanup, NULL);
+	pthread_mutex_lock(&config_lock);
+	while (running_state != DAEMON_CONFIGURE &&
+	       running_state != DAEMON_SHUTDOWN)
+		pthread_cond_wait(&config_cond, &config_lock);
+	state = running_state;
+	pthread_cleanup_pop(1);
+
+	return state;
+}
+
+static void child_configure(struct vectors *vecs)
+{
+	struct config *conf;
+
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
+	lock(&vecs->lock);
+	pthread_testcancel();
+	if (!need_to_delay_reconfig(vecs)) {
+		reconfigure(vecs);
+	} else {
+		conf = get_multipath_config();
+		conf->delayed_reconfig = 1;
+		put_multipath_config(conf);
+	}
+	lock_cleanup_pop(vecs->lock);
+}
+
 static int
 child (void * param)
 {
@@ -2832,7 +2888,7 @@ child (void * param)
 	int i;
 #ifdef USE_SYSTEMD
 	unsigned long checkint;
-	int startup_done = 0;
+	int startup_done;
 #endif
 	int rc;
 	int pid_fd = -1;
@@ -2928,18 +2984,8 @@ child (void * param)
 	 */
 	conf = NULL;
 
-	pthread_cleanup_push(config_cleanup, NULL);
-	pthread_mutex_lock(&config_lock);
-
-	__post_config_state(DAEMON_IDLE);
-	rc = pthread_create(&uxlsnr_thr, &misc_attr, uxlsnrloop, vecs);
-	if (!rc) {
-		/* Wait for uxlsnr startup */
-		while (running_state == DAEMON_IDLE)
-			pthread_cond_wait(&config_cond, &config_lock);
-		state = running_state;
-	}
-	pthread_cleanup_pop(1);
+	startup_done = 0;
+	rc = wait_for_uxlsnr(&state, &uxlsnr_thr, &misc_attr, vecs);
 
 	if (rc) {
 		condlog(0, "failed to create cli listener: %d", rc);
@@ -2986,27 +3032,11 @@ child (void * param)
 	pthread_attr_destroy(&misc_attr);
 
 	while (1) {
-		pthread_cleanup_push(config_cleanup, NULL);
-		pthread_mutex_lock(&config_lock);
-		while (running_state != DAEMON_CONFIGURE &&
-		       running_state != DAEMON_SHUTDOWN)
-			pthread_cond_wait(&config_cond, &config_lock);
-		state = running_state;
-		pthread_cleanup_pop(1);
+		state = wait_for_child_state();
 		if (state == DAEMON_SHUTDOWN)
 			break;
 		if (state == DAEMON_CONFIGURE) {
-			pthread_cleanup_push(cleanup_lock, &vecs->lock);
-			lock(&vecs->lock);
-			pthread_testcancel();
-			if (!need_to_delay_reconfig(vecs)) {
-				reconfigure(vecs);
-			} else {
-				conf = get_multipath_config();
-				conf->delayed_reconfig = 1;
-				put_multipath_config(conf);
-			}
-			lock_cleanup_pop(vecs->lock);
+			child_configure(vecs);
 			post_config_state(DAEMON_IDLE);
 #ifdef USE_SYSTEMD
 			if (!startup_done) {
