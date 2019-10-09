@@ -457,6 +457,30 @@ genhelp_handler (const char *cmd, int error)
 	return reply;
 }
 
+static int run_handler_locked(const struct handler *h,
+			      struct timespec *tmo, vector cmdvec,
+			      char **reply, int *len, void *data)
+{
+	int locked, r;
+	struct vectors *vecs = data;
+
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
+	locked = 0;
+	if (tmo->tv_sec) {
+		r = timedlock(&vecs->lock, tmo);
+	} else {
+		lock(&vecs->lock);
+		r = 0;
+	}
+	if (r == 0) {
+		locked = 1;
+		pthread_testcancel();
+		r = h->fn(cmdvec, reply, len, data);
+	}
+	pthread_cleanup_pop(locked);
+	return r;
+}
+
 int
 parse_cmd (char * cmd, char ** reply, int * len, void * data, int timeout )
 {
@@ -494,25 +518,9 @@ parse_cmd (char * cmd, char ** reply, int * len, void * data, int timeout )
 	} else {
 		tmo.tv_sec = 0;
 	}
-	if (h->locked) {
-		int locked;
-		struct vectors * vecs = (struct vectors *)data;
-
-		pthread_cleanup_push(cleanup_lock, &vecs->lock);
-		locked = 0;
-		if (tmo.tv_sec) {
-			r = timedlock(&vecs->lock, &tmo);
-		} else {
-			lock(&vecs->lock);
-			r = 0;
-		}
-		if (r == 0) {
-			locked = 1;
-			pthread_testcancel();
-			r = h->fn(cmdvec, reply, len, data);
-		}
-		pthread_cleanup_pop(locked);
-	} else
+	if (h->locked)
+		r = run_handler_locked(h, &tmo, cmdvec, reply, len, data);
+	else
 		r = h->fn(cmdvec, reply, len, data);
 	free_keys(cmdvec);
 
