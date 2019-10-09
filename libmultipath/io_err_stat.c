@@ -461,10 +461,10 @@ static int poll_io_err_stat(struct vectors *vecs, struct io_err_stat_path *pp)
 
 	io_err_stat_log(4, "%s: check end", pp->devname);
 
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
 	err_rate = pp->io_nr == 0 ? 0 : (pp->io_err_nr * 1000.0f) / pp->io_nr;
 	io_err_stat_log(3, "%s: IO error rate (%.1f/1000)",
 			pp->devname, err_rate);
-	pthread_cleanup_push(cleanup_lock, &vecs->lock);
 	lock(&vecs->lock);
 	pthread_testcancel();
 	path = find_path_by_dev(vecs->pathvec, pp->devname);

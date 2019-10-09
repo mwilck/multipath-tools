@@ -2143,3 +2143,19 @@ blank:
 
 	return PATHINFO_OK;
 }
+
+/*
+ * Grab conf, call pathinfo, and release conf.
+ * Needed to avoid -Wclobbered warnings in some places
+ */
+int pathinfo_with_conf(struct path *pp, int flags)
+{
+	struct config *conf;
+	int r;
+
+	conf = get_multipath_config();
+	pthread_cleanup_push(put_multipath_config, conf);
+	r = pathinfo(pp, conf, flags);
+	pthread_cleanup_pop(1);
+	return r;
+}

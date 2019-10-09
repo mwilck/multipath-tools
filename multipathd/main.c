@@ -702,6 +702,18 @@ flush_map(struct multipath * mpp, struct vectors * vecs, int nopaths)
 	return 0;
 }
 
+static int ev_add_map_locked(char *dev, const char *alias, struct vectors *vecs)
+{
+	int rc;
+
+	pthread_cleanup_push(cleanup_lock, &vecs->lock);
+	lock(&vecs->lock);
+	pthread_testcancel();
+	rc = ev_add_map(dev, alias, vecs);
+	lock_cleanup_pop(vecs->lock);
+	return rc;
+}
+
 static int
 uev_add_map (struct uevent * uev, struct vectors * vecs)
 {
@@ -721,12 +733,8 @@ uev_add_map (struct uevent * uev, struct vectors * vecs)
 			return 1;
 		}
 	}
-	pthread_cleanup_push(cleanup_lock, &vecs->lock);
-	lock(&vecs->lock);
-	pthread_testcancel();
-	rc = ev_add_map(uev->kernel, alias, vecs);
-	lock_cleanup_pop(vecs->lock);
 	FREE(alias);
+	rc = ev_add_map_locked(uev->kernel, alias, vecs);
 	return rc;
 }
 
@@ -1227,18 +1235,6 @@ out:
 fail:
 	remove_map_and_stop_waiter(mpp, vecs);
 	return 1;
-}
-
-static int pathinfo_with_conf(struct path *pp, int flags)
-{
-	struct config *conf;
-	int r;
-
-	conf = get_multipath_config();
-	pthread_cleanup_push(put_multipath_config, conf);
-	r = pathinfo(pp, conf, flags);
-	pthread_cleanup_pop(1);
-	return r;
 }
 
 static int alloc_path_with_pi_and_conf(struct udev_device *udev,

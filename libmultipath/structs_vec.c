@@ -52,7 +52,6 @@ int adopt_paths(vector pathvec, struct multipath *mpp)
 {
 	int i, ret;
 	struct path * pp;
-	struct config *conf;
 
 	if (!mpp)
 		return 0;
@@ -78,11 +77,7 @@ int adopt_paths(vector pathvec, struct multipath *mpp)
 			if (!find_path_by_dev(mpp->paths, pp->dev) &&
 			    store_path(mpp->paths, pp))
 					return 1;
-			conf = get_multipath_config();
-			pthread_cleanup_push(put_multipath_config, conf);
-			ret = pathinfo(pp, conf,
-				       DI_PRIO | DI_CHECKER);
-			pthread_cleanup_pop(1);
+			ret = pathinfo_with_conf(pp, DI_PRIO | DI_CHECKER);
 			if (ret)
 				return 1;
 		}

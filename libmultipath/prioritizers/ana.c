@@ -107,6 +107,28 @@ static int get_ana_state(__u32 nsid, __u32 anagrpid, void *ana_log,
 	return -ANA_ERR_GETANAS_NOTFOUND;
 }
 
+static int get_ana_log_and_free(const struct path *pp,
+				void *ana_log, size_t ana_log_len,
+				bool is_anagrpid_const, __u32 nsid,
+				const struct nvme_id_ns *ns)
+{
+	int rc;
+
+	pthread_cleanup_push(free, ana_log);
+	rc = nvme_ana_log(pp->fd, ana_log, ana_log_len,
+			  is_anagrpid_const ? NVME_ANA_LOG_RGO : 0);
+	if (rc) {
+		log_nvme_errcode(rc, pp->dev, "nvme_ana_log");
+		rc = -ANA_ERR_GETANALOG_FAILED;
+	} else
+		rc = get_ana_state(nsid,
+				   is_anagrpid_const ?
+				   le32_to_cpu(ns->anagrpid) : 0,
+				   ana_log, ana_log_len);
+	pthread_cleanup_pop(1);
+	return rc;
+}
+
 static int get_ana_info(struct path * pp)
 {
 	int	rc;
@@ -152,18 +174,8 @@ static int get_ana_info(struct path * pp)
 	ana_log = malloc(ana_log_len);
 	if (!ana_log)
 		return -ANA_ERR_NO_MEMORY;
-	pthread_cleanup_push(free, ana_log);
-	rc = nvme_ana_log(pp->fd, ana_log, ana_log_len,
-			  is_anagrpid_const ? NVME_ANA_LOG_RGO : 0);
-	if (rc) {
-		log_nvme_errcode(rc, pp->dev, "nvme_ana_log");
-		rc = -ANA_ERR_GETANALOG_FAILED;
-	} else
-		rc = get_ana_state(nsid,
-				   is_anagrpid_const ?
-				   le32_to_cpu(ns.anagrpid) : 0,
-				   ana_log, ana_log_len);
-	pthread_cleanup_pop(1);
+	rc = get_ana_log_and_free(pp, ana_log, ana_log_len, is_anagrpid_const,
+				  nsid, &ns);
 	if (rc >= 0)
 		condlog(4, "%s: ana state = %02x [%s]", pp->dev, rc,
 			aas_print_string(rc));

@@ -997,6 +997,15 @@ cli_restore_no_daemon_q(void * v, char ** reply, int * len, void * data)
 	return 0;
 }
 
+static void select_no_path_retry_with_conf(struct multipath *mpp)
+{
+	struct config *conf = get_multipath_config();
+
+	pthread_cleanup_push(put_multipath_config, conf);
+	select_no_path_retry(conf, mpp);
+	pthread_cleanup_pop(1);
+}
+
 int
 cli_restore_queueing(void *v, char **reply, int *len, void *data)
 {
@@ -1004,7 +1013,6 @@ cli_restore_queueing(void *v, char **reply, int *len, void *data)
 	char * mapname = get_keyparam(v, MAP);
 	struct multipath *mpp;
 	int minor;
-	struct config *conf;
 
 	mapname = convert_dev(mapname, 0);
 	condlog(2, "%s: restore map queueing (operator)", mapname);
@@ -1019,10 +1027,7 @@ cli_restore_queueing(void *v, char **reply, int *len, void *data)
 	}
 
 	mpp->disable_queueing = 0;
-	conf = get_multipath_config();
-	pthread_cleanup_push(put_multipath_config, conf);
-	select_no_path_retry(conf, mpp);
-	pthread_cleanup_pop(1);
+	select_no_path_retry_with_conf(mpp);
 
 	if (mpp->no_path_retry != NO_PATH_RETRY_UNDEF &&
 			mpp->no_path_retry != NO_PATH_RETRY_FAIL) {
@@ -1047,10 +1052,7 @@ cli_restore_all_queueing(void *v, char **reply, int *len, void *data)
 	condlog(2, "restore queueing (operator)");
 	vector_foreach_slot(vecs->mpvec, mpp, i) {
 		mpp->disable_queueing = 0;
-		struct config *conf = get_multipath_config();
-		pthread_cleanup_push(put_multipath_config, conf);
-		select_no_path_retry(conf, mpp);
-		pthread_cleanup_pop(1);
+		select_no_path_retry_with_conf(mpp);
 		if (mpp->no_path_retry != NO_PATH_RETRY_UNDEF &&
 		    mpp->no_path_retry != NO_PATH_RETRY_FAIL) {
 			dm_queue_if_no_path(mpp->alias, 1);
