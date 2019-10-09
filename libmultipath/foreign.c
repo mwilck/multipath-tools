@@ -124,7 +124,7 @@ static void free_pre(void *arg)
 	}
 }
 
-static int _init_foreign(const char *multipath_dir, const char *enable)
+static int _init_foreign(const char *multipath_dir, const char *const enable)
 {
 	char pathbuf[PATH_MAX];
 	struct dirent **di;

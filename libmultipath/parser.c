@@ -188,7 +188,7 @@ _snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
 }
 
 int
-snprint_keyword(char *buff, int len, char *fmt, struct keyword *kw,
+snprint_keyword(char *buff, int len, char *const fmt, struct keyword *kw,
 		 const void *data)
 {
 	int r;
