@@ -303,10 +303,8 @@ bool sysfs_is_multipathed(const struct path *pp)
 	int n, r, i;
 	bool found = false;
 
-	n = snprintf(pathbuf, sizeof(pathbuf), "/sys/block/%s/holders",
-		     pp->dev);
-
-	if (n < 0 || (size_t)n >= sizeof(pathbuf)) {
+	n = 0;
+	if (sprintf_fwd(pathbuf, &n, "/sys/block/%s/holders", pp->dev)) {
 		condlog(1, "%s: pathname overflow", __func__);
 		return false;
 	}
