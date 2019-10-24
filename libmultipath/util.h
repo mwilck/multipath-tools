@@ -40,6 +40,22 @@ void set_max_fds(rlim_t max_fds);
 		__ret < 0 || (size_t)__ret >= __size;			\
 	})
 
+#define snprintf_fwd(var, size, ptr, format, args...)			\
+	({								\
+		size_t __size = size;					\
+		int __ret;						\
+		bool __err;						\
+									\
+		__ret = snprintf(var, size, format, ##args);		\
+		__err = __ret < 0 || (size_t)__ret >= __size;		\
+		if (!__err)						\
+			*(ptr) += __ret;				\
+		__err;							\
+	})
+
+#define sprintf_fwd(var, ptr, format, args...)	\
+	snprintf_fwd(var, sizeof(var), ptr, format, args)
+
 #define pthread_cleanup_push_cast(f, arg)		\
 	pthread_cleanup_push(((void (*)(void *))&f), (arg))
 
