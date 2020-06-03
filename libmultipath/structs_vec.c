@@ -424,6 +424,19 @@ find_existing_alias (struct multipath * mpp,
 		}
 }
 
+bool does_alias_exist(const struct _vector *mpvec, const struct multipath *mpp)
+{
+	const struct multipath *other;
+
+	other = find_mp_by_alias(mpvec, mpp->alias);
+	if (other == NULL || !strcmp(other->wwid, mpp->wwid))
+		return false;
+	condlog(0, "%s: alias \"%s\" already present with WWID %s, skipping",
+		mpp->wwid, mpp->alias, other->wwid);
+	condlog(0, "please check alias settings in config and bindings file");
+	return true;
+}
+
 struct multipath *add_map_with_path(struct vectors *vecs, struct path *pp,
 				    int add_vec)
 {

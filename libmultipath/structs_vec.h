@@ -33,6 +33,7 @@ void remove_map_by_alias(const char *alias, struct vectors * vecs,
 void remove_maps (struct vectors * vecs);
 
 void sync_map_state (struct multipath *);
+bool does_alias_exist(const struct _vector *mpvec, const struct multipath *mpp);
 struct multipath * add_map_with_path (struct vectors * vecs,
 				struct path * pp, int add_vec);
 void update_queue_mode_del_path(struct multipath *mpp);

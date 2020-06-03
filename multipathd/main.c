@@ -966,8 +966,12 @@ rescan:
 			orphan_path(pp, "only one path");
 			return 0;
 		}
-		condlog(4,"%s: creating new map", pp->dev);
 		if ((mpp = add_map_with_path(vecs, pp, 1))) {
+			if (does_alias_exist(vecs->mpvec, mpp)) {
+				remove_map(mpp, vecs, PURGE_VEC);
+				return 0;
+			}
+			condlog(4,"%s: creating new map", pp->dev);
 			mpp->action = ACT_CREATE;
 			/*
 			 * We don't depend on ACT_CREATE, as domap will

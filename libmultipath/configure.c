@@ -1187,6 +1187,11 @@ int coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid,
 		}
 		verify_paths(mpp, vecs);
 
+		if (does_alias_exist(newmp, mpp)) {
+			remove_map(mpp, vecs, PURGE_VEC);
+			continue;
+		}
+
 		params[0] = '\0';
 		if (setup_map(mpp, params, PARAMS_SIZE, vecs)) {
 			remove_map(mpp, vecs, 0);
