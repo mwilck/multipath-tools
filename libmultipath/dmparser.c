@@ -122,8 +122,7 @@ err:
 
 #undef APPEND
 
-int disassemble_map(vector pathvec, char *params, struct multipath *mpp,
-		    int is_daemon)
+int disassemble_map(vector pathvec, char *params, struct multipath *mpp)
 {
 	char * word;
 	char * p;
@@ -311,8 +310,7 @@ int disassemble_map(vector pathvec, char *params, struct multipath *mpp,
 					strlcpy(pp->wwid, mpp->wwid,
 						WWID_SIZE);
 				}
-				/* Only call this in multipath client mode */
-				if (!is_daemon && store_path(pathvec, pp))
+				if (store_path(pathvec, pp))
 					goto out1;
 			} else {
 				if (!strlen(pp->wwid) &&
