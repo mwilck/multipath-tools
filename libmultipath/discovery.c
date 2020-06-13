@@ -137,7 +137,7 @@ path_discover (vector pathvec, struct config * conf,
 				      udevice, flag | DI_BLACKLIST,
 				      NULL);
 	else
-		return pathinfo(pp, conf, flag);
+		return pathinfo(pp, conf, flag | DI_BLACKLIST);
 }
 
 static void cleanup_udev_enumerate_ptr(void *arg)
