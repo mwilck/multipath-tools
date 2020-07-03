@@ -941,7 +941,7 @@ cli_reload(void *v, char **reply, int *len, void *data)
 		return 1;
 	}
 
-	return update_path_groups(mpp, vecs, 0);
+	return reload_and_sync_map(mpp, vecs, 0);
 }
 
 int resize_map(struct multipath *mpp, unsigned long long size,
@@ -1621,7 +1621,7 @@ int cli_set_marginal(void * v, char ** reply, int * len, void * data)
 	}
 	pp->marginal = 1;
 
-	return update_path_groups(pp->mpp, vecs, 0);
+	return reload_and_sync_map(pp->mpp, vecs, 0);
 }
 
 int cli_unset_marginal(void * v, char ** reply, int * len, void * data)
@@ -1648,7 +1648,7 @@ int cli_unset_marginal(void * v, char ** reply, int * len, void * data)
 	}
 	pp->marginal = 0;
 
-	return update_path_groups(pp->mpp, vecs, 0);
+	return reload_and_sync_map(pp->mpp, vecs, 0);
 }
 
 int cli_unset_all_marginal(void * v, char ** reply, int * len, void * data)
@@ -1685,5 +1685,5 @@ int cli_unset_all_marginal(void * v, char ** reply, int * len, void * data)
 		vector_foreach_slot (pgp->paths, pp, j)
 			pp->marginal = 0;
 
-	return update_path_groups(mpp, vecs, 0);
+	return reload_and_sync_map(mpp, vecs, 0);
 }
