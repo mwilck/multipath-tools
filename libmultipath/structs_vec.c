@@ -118,6 +118,12 @@ bool update_pathvec_from_dm(vector pathvec, struct multipath *mpp,
 			goto delete_pg;
 
 		vector_foreach_slot(pgp->paths, pp, j) {
+
+			if (pp->mpp && pp->mpp != mpp) {
+				condlog(0, "BUG: %s: found path %s which is already in %s",
+					mpp->alias, pp->dev, pp->mpp->alias);
+				goto bad_path;
+			}
 			pp->mpp = mpp;
 
 			if (pp->udev) {
@@ -163,25 +169,28 @@ bool update_pathvec_from_dm(vector pathvec, struct multipath *mpp,
 
 					condlog(0, "%s: path %s WWID %s doesn't match, removing from map",
 						mpp->wwid, pp->dev_t, pp->wwid);
-					/*
-					 * This path exists, but in the wong map.
-					 * We can't reload the map from here.
-					 * Instead, treat this path like "missing udev",
-					 * which it probably is.
-					 * check_path() will trigger an uevent
-					 * and reset pp->tick.
-					 */
-					must_reload = true;
-					pp->mpp = NULL;
-					dm_fail_path(mpp->alias, pp->dev_t);
-					vector_del_slot(pgp->paths, j--);
-					pp->initialized = INIT_MISSING_UDEV;
-					pp->tick = 1;
+					goto bad_path;
 				}
 				condlog(2, "%s: adding new path %s",
 					mpp->alias, pp->dev);
 				store_path(pathvec, pp);
+
 			}
+			continue;
+
+		bad_path:
+			/*
+			 * This path exists, but in the wrong map.
+			 * We can't reload the map from here.
+			 * Instead, treat this path like "missing udev".
+			 * check_path() will trigger an uevent and reset pp->tick.
+			 */
+			must_reload = true;
+			pp->mpp = NULL;
+			dm_fail_path(mpp->alias, pp->dev_t);
+			vector_del_slot(pgp->paths, j--);
+			pp->initialized = INIT_MISSING_UDEV;
+			pp->tick = 1;
 		}
 		if (VECTOR_SIZE(pgp->paths) != 0)
 			continue;
