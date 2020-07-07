@@ -2019,6 +2019,7 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
 	int disable_reinstate = 0;
 	int oldchkrstate = pp->chkrstate;
 	int retrigger_tries, verbosity;
+	unsigned int retrigger_delay;
 	unsigned int checkint, max_checkint;
 	struct config *conf;
 	int marginal_pathgroups, marginal_changed = 0;
@@ -2036,6 +2037,7 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
 
 	conf = get_multipath_config();
 	retrigger_tries = conf->retrigger_tries;
+	retrigger_delay = conf->retrigger_delay;
 	checkint = conf->checkint;
 	max_checkint = conf->max_checkint;
 	verbosity = conf->verbosity;
@@ -2048,6 +2050,8 @@ check_path (struct vectors * vecs, struct path * pp, unsigned int ticks)
 	};
 
 	if (!pp->mpp && pp->initialized == INIT_MISSING_UDEV) {
+		if (pp->tick != retrigger_delay)
+			pp->tick = conf->retrigger_delay;
 		if (pp->retriggers < retrigger_tries) {
 			condlog(2, "%s: triggering change event to reinitialize",
 				pp->dev);
