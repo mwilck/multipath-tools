@@ -29,9 +29,26 @@ jobs:
       - name: archive
         run: >
           tar cfv s390x.tar
+          Makefile*
           libmpathcmd/*.so* libmultipath/*.so*
-          tests/lib tests/*-test
+          tests/lib tests/*-test tests/Makefile
       - uses: actions/upload-artifact@v1
         with:
           name: multipath-s390x
           path: s390x.tar
+  run:
+    runs-on: ubuntu-20.04
+    needs: build
+    steps:
+      - name: get binaries
+        uses: actions/download-artifact@v1
+        with:
+          name: multipath-s390x
+      - name: unpack
+        run: tar xfv multipath-s390x/s390x.tar
+      - name: enable s390 arch
+        run: |
+          sudo docker run --rm --privileged multiarch/qemu-user-static:s390x --reset -p yes
+          docker run --rm -t s390x/debian:buster uname -m
+      - name: run tests
+        run: docker run --rm -t -v $PWD:/build
