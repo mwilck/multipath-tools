@@ -24,5 +24,14 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v1
-      - name: look
-        run: ls -l
+      - name: build
+        run: make test-progs
+      - name: archive
+        run: >
+          tar cfv s390x.tar
+          libmpathcmd/*.so* libmultipath/*.so*
+          tests/lib tests/*-test
+      - uses: actions/upload-artifact@v1
+        with:
+          name: multipath-s390x
+          path: s390x.tar
