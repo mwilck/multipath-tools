@@ -1,0 +1,16 @@
+name: compile and unit test on s390x
+on:
+  push:
+    branches: [exp]
+jobs:
+  prep:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: install
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes docker.io
+          sudo systemctl start docker
+          ls -l /proc/sys/fs/binfmt_misc/
+          sudo docker run --rm -t ppc64le/busybox uname -m
+          docker run --rm -t ppc64le/busybox uname -m
