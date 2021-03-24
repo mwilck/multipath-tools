@@ -51,4 +51,4 @@ jobs:
           sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
           docker run --rm -t s390x/debian:buster uname -m
       - name: run tests
-        run: docker run --rm -t -v $PWD:/build
+        run: docker run --rm -t -v $PWD:/build mwilck/multipath-run-buster-s390x
