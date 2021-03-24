@@ -3,21 +3,6 @@ on:
   push:
     branches: [exp]
 jobs:
-  prep:
-    runs-on: ubuntu-20.04
-    steps:
-      - name: check
-        run: |
-          sudo apt-get update
-          sudo systemctl status docker
-          pwd
-          ls -l
-      - name: install
-        run: |
-          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-          ls -l /proc/sys/fs/binfmt_misc/
-          sudo docker run --rm -t ppc64le/busybox uname -m
-          docker run --rm -t ppc64le/busybox uname -m
   build:
     runs-on: ubuntu-20.04
     container: mwilck/multipath-build-buster-s390x
@@ -31,7 +16,7 @@ jobs:
           tar cfv s390x.tar
           Makefile*
           libmpathcmd/*.so* libmultipath/*.so*
-          tests/lib tests/*-test tests/Makefile
+          tests/lib tests/*-test tests/Makefile tests/*.so*
       - uses: actions/upload-artifact@v1
         with:
           name: multipath-s390x
