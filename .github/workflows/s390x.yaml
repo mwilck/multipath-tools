@@ -6,9 +6,14 @@ jobs:
   prep:
     runs-on: ubuntu-20.04
     steps:
-      - name: install
+      - name: check
         run: |
           sudo apt-get update
+          sudo dpkg -l
+          sudo systemctl
+          sudo systemctl status docker
+      - name: install
+        run: |
           sudo apt-get install --yes docker.io
           sudo systemctl start docker
           ls -l /proc/sys/fs/binfmt_misc/
