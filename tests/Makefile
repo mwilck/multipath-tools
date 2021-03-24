@@ -20,7 +20,7 @@ HELPERS := test-lib.o test-log.o
 .PRECIOUS: $(TESTS:%=%-test)
 
 all:	$(TESTS:%=%.out)
-progs:	$(TESTS:%=%-test)
+progs:	$(TESTS:%=%-test) lib/libchecktur.so
 valgrind:	$(TESTS:%=%.vgr)
 
 # test-specific compiler flags
