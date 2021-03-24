@@ -20,7 +20,7 @@ HELPERS := test-lib.o test-log.o
 .PRECIOUS: $(TESTS:%=%-test)
 
 all:	$(TESTS:%=%.out)
-progs:	$(TESTS:%=%-test)
+progs:	lib/libchecktur.so $(TESTS:%=%-test)
 valgrind:	$(TESTS:%=%.vgr)
 
 # test-specific compiler flags
@@ -71,11 +71,11 @@ lib/libchecktur.so:
 	mkdir -p lib
 	ln ../libmultipath/*/*.so lib
 
-%.out:	%-test lib/libchecktur.so
+%.out:	progs
 	@echo == running $< ==
 	@LD_LIBRARY_PATH=.:$(mpathcmddir) ./$< >$@
 
-%.vgr:  %-test lib/libchecktur.so
+%.vgr:  progs
 	@echo == running valgrind for $< ==
 	@LD_LIBRARY_PATH=.:$(mpathcmddir) \
 		valgrind --leak-check=full --error-exitcode=128 ./$< >$@ 2>&1
