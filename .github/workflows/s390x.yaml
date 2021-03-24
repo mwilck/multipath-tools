@@ -9,13 +9,10 @@ jobs:
       - name: check
         run: |
           sudo apt-get update
-          sudo dpkg -l
-          sudo systemctl
           sudo systemctl status docker
       - name: install
         run: |
-          sudo apt-get install --yes docker.io
-          sudo systemctl start docker
+          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
           ls -l /proc/sys/fs/binfmt_misc/
           sudo docker run --rm -t ppc64le/busybox uname -m
           docker run --rm -t ppc64le/busybox uname -m
