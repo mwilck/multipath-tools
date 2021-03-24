@@ -48,7 +48,7 @@ jobs:
         run: tar xfv multipath-s390x/s390x.tar
       - name: enable s390 arch
         run: |
-          sudo docker run --rm --privileged multiarch/qemu-user-static:s390x --reset -p yes
+          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
           docker run --rm -t s390x/debian:buster uname -m
       - name: run tests
         run: docker run --rm -t -v $PWD:/build
