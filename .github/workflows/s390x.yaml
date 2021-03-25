@@ -34,4 +34,4 @@ jobs:
       - name: enable s390 arch
         run: sudo docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - name: run tests
-        run: docker run --rm -t -v $PWD:/build mwilck/multipath-run-buster-s390x
+        uses: docker://mwilck/multipath-run-buster-s390x
