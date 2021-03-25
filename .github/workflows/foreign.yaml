@@ -48,6 +48,7 @@ jobs:
       - name: enable foreign arch
         run: sudo docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - name: run tests
-        uses: docker://mwilck/multipath-run-${{ matrix.os }}${{ matrix.arch }}
+        uses: mosteo-actions/docker-run@v1
         with:
-          args: -C tests
+          image: mwilck/multipath-run-${{ matrix.os }}${{ matrix.arch }}
+          command: -C tests
