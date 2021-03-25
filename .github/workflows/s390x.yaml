@@ -35,3 +35,4 @@ jobs:
         run: sudo docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - name: run tests
         uses: docker://mwilck/multipath-run-buster-s390x
+        args: ['-C', 'tests']
