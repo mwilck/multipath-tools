@@ -36,4 +36,4 @@ jobs:
       - name: run tests
         uses: docker://mwilck/multipath-run-buster-s390x
         with:
-          args: ['-C', 'tests']
+          args: -C tests
