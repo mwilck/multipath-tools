@@ -32,8 +32,6 @@ jobs:
       - name: unpack
         run: tar xfv multipath-s390x/s390x.tar
       - name: enable s390 arch
-        run: |
-          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-          docker run --rm -t s390x/debian:buster uname -m
+        run: sudo docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - name: run tests
         run: docker run --rm -t -v $PWD:/build mwilck/multipath-run-buster-s390x
