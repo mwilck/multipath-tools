@@ -1,0 +1,39 @@
+name: compile and unit test on aarch64
+on:
+  push:
+    branches: [exp]
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    container: mwilck/multipath-build-buster-aarch64
+    steps:
+      - name: checkout
+        uses: actions/checkout@v1
+      - name: build
+        run: make test-progs
+      - name: archive
+        run: >
+          tar cfv binaries.tar
+          Makefile*
+          libmpathcmd/*.so* libmultipath/*.so*
+          tests/lib tests/*-test tests/Makefile tests/*.so*
+      - uses: actions/upload-artifact@v1
+        with:
+          name: multipath-aarch64
+          path: binaries.tar
+  run:
+    runs-on: ubuntu-20.04
+    needs: build
+    steps:
+      - name: get binaries
+        uses: actions/download-artifact@v1
+        with:
+          name: multipath-aarch64
+      - name: unpack
+        run: tar xfv multipath-aarch64/binaries.tar
+      - name: enable aarch64 arch
+        run: sudo docker run --rm --privileged multiarch/qemu-user-static:register --reset
+      - name: run tests
+        uses: docker://mwilck/multipath-run-buster-aarch64
+        with:
+          args: -C tests
