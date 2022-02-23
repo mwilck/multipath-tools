@@ -7,6 +7,7 @@ SONAME = 0
 DEVLIB = libmultipath.so
 LIBS = $(DEVLIB).$(SONAME)
 VERSION_SCRIPT := libmultipath.version
+DYNAMIC_LIST := dynamic.list
 
 CFLAGS += $(LIB_CFLAGS) -I$(mpathcmddir) -I$(mpathpersistdir) -I$(nvmedir)
 
@@ -81,7 +82,9 @@ nvme-ioctl.h: nvme/nvme-ioctl.h
 
 $(LIBS): $(OBJS) $(VERSION_SCRIPT)
 	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -Wl,-soname=$@ \
-		-Wl,--version-script=$(VERSION_SCRIPT) -o $@ $(OBJS) $(LIBDEPS)
+		-Wl,--version-script=$(VERSION_SCRIPT) \
+		-Wl,--dynamic-list=$(DYNAMIC_LIST) \
+		-o $@ $(OBJS) $(LIBDEPS)
 
 $(DEVLIB): $(LIBS)
 	$(LN) $(LIBS) $@
@@ -93,7 +96,9 @@ $(NV_VERSION_SCRIPT):	$(VERSION_SCRIPT)
 
 $(LIBS:%.so.$(SONAME)=%-nv.so):	$(OBJS) $(NV_VERSION_SCRIPT)
 	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -Wl,-soname=$@ \
-		-Wl,--version-script=$(NV_VERSION_SCRIPT) -o $@ $(OBJS) $(LIBDEPS)
+		-Wl,--version-script=$(NV_VERSION_SCRIPT) \
+		-Wl,--dynamic-list=$(DYNAMIC_LIST) \
+		-o $@ $(OBJS) $(LIBDEPS)
 
 abi:    $(LIBS:%.so.$(SONAME)=%-nv.abi)
 

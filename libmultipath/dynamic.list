@@ -1,0 +1,5 @@
+{
+	get_multipath_config;
+	put_multipath_config;
+};
+
