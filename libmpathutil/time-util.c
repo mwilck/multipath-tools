@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <pthread.h>
+#include <stdlib.h>
 #include <time.h>
 #include "time-util.h"
 
@@ -31,14 +32,15 @@ void pthread_cond_init_mono(pthread_cond_t *cond)
 /* Ensure that 0 <= ts->tv_nsec && ts->tv_nsec < 1000 * 1000 * 1000. */
 void normalize_timespec(struct timespec *ts)
 {
-	while (ts->tv_nsec < 0) {
-		ts->tv_nsec += 1000L * 1000 * 1000;
-		ts->tv_sec--;
+	const long billion = 1000L * 1000 * 1000;
+	ldiv_t dv = ldiv(ts->tv_nsec, billion);
+
+	if (dv.rem < 0) {
+		dv.rem += billion;
+		dv.quot--;
 	}
-	while (ts->tv_nsec >= 1000L * 1000 * 1000) {
-		ts->tv_nsec -= 1000L * 1000 * 1000;
-		ts->tv_sec++;
-	}
+	ts->tv_nsec = dv.rem;
+	ts->tv_sec += dv.quot;
 }
 
 /* Compute *res = *a - *b */
