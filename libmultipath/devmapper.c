@@ -1191,7 +1191,7 @@ dm_disablegroup(const char * mapname, int index)
 	return dm_groupmsg("disable", mapname, index);
 }
 
-static int dm_get_multipath(const char *name, struct multipath **pmpp)
+static int dm_get_multipath(const struct dm_names *names, struct multipath **pmpp)
 {
 	struct multipath __attribute__((cleanup(cleanup_multipath))) *mpp = NULL;
 	char uuid[DM_UUID_LEN];
@@ -1201,19 +1201,26 @@ static int dm_get_multipath(const char *name, struct multipath **pmpp)
 	if (!mpp)
 		return DMP_ERR;
 
-	mpp->alias = strdup(name);
+	mpp->alias = strdup(names->name);
 
 	if (!mpp->alias)
 		return DMP_ERR;
 
-	if ((rc = libmp_mapinfo(DM_MAP_BY_NAME | MAPINFO_MPATH_ONLY,
-			  (mapid_t) { .str = name },
-			  (mapinfo_t) {
+	if ((rc = libmp_mapinfo(DM_MAP_BY_DEV | MAPINFO_MPATH_ONLY,
+				(mapid_t) { ._u = { major(names->dev), minor(names->dev) } },
+				(mapinfo_t) {
 				  .size = &mpp->size,
 				  .uuid = uuid,
 				  .dmi = &mpp->dmi,
 			  })) != DMP_OK)
 		return rc;
+
+	if (mpp->dmi.major != major(names->dev) || mpp->dmi.minor != minor(names->dev)) {
+		condlog(1, "%s: Error: major/minor mismatch %u:%u != %u:%u",
+			__func__, mpp->dmi.major, mpp->dmi.minor,
+			major(names->dev), minor(names->dev));
+		return DMP_ERR;
+	}
 
 	if (!is_mpath_uuid(uuid))
 		return DMP_NO_MATCH;
@@ -1251,7 +1258,7 @@ int dm_get_maps(vector mp)
 	}
 
 	do {
-		switch (dm_get_multipath(names->name, &mpp)) {
+		switch (dm_get_multipath(names, &mpp)) {
 		case DMP_OK:
 			if (!vector_alloc_slot(mp)) {
 				free_multipath(mpp, KEEP_PATHS);
